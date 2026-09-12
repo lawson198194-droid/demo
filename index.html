@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Baseball Growth Coach · 莀安 Demo v8.2 (综合分析 + 智谱直连)</title>
+<title>Baseball Growth Coach · 莀安 Demo v8.3 (9宫格+防编造)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -477,6 +477,7 @@ const I18N = {
   ai_vs_recent_title: { zh:'本次 vs 近期数据', en:'This Video vs Recent' },
   ai_trend_title: { zh:'近期训练/比赛趋势', en:'Recent Trend' },
   ai_load_title: { zh:'训练负荷提醒', en:'Training Load' },
+  ai_zone_title: { zh:'📍 9宫格战术', en:'📍 9-Zone Tactics' },
   ai_no_recent: { zh:'⚠️ 暂无近期数据，仅基于视频分析', en:'⚠️ No recent data — pose-only analysis' },
   ai_hk_notice: { zh:'ℹ️ Gemini / OpenAI / Claude 均不支持香港地区，建议用智谱或 DeepSeek。', en:'ℹ️ Gemini / OpenAI / Claude do not serve Hong Kong. Use Zhipu or DeepSeek instead.' },
   ai_knee_hint: { zh:'提示：让镜头能拍到完整上半身（头顶到胯部），光线充足。', en:'Tip: film full upper body (head to hips), good lighting.' },
@@ -2292,25 +2293,76 @@ function mockCoachEval(angles) {
 // ===== v8 LLM 多 provider 集成（智谱 GLM / DeepSeek / Gemini）=====
 // 注意：配置对象与读写函数已上移至文件前部（避免 const TDZ 顺序问题）
 
-// ===== v8.2: 上下文构建（近期训练/比赛 + 历史反思） =====
-// 关键原则：只喂真实数据，明确标注"无数据"；绝不喂"虚构"或"随机"填充
+// ===== v8.2 9宫格统计 + buildContextText =====
+// 严格按 DATA.pitches[] 最近 N 球，计算好球率分布。仅返回真实数字，不估算
+function strikeZoneStats(N) {
+  const all = (DATA.pitches || []).slice().sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const recent = all.slice(0, N);
+  if (!recent.length) return null;
+  let strikes = 0, balls = 0, totalSpeed = 0, speedCount = 0;
+  const byZone = {}; // location 0-24 -> {s, b}
+  for (const p of recent) {
+    const loc = +p.location;
+    if (!Number.isInteger(loc) || loc < 0 || loc > 24) continue;
+    if (!byZone[loc]) byZone[loc] = { s: 0, b: 0 };
+    if (p.isStrike) { byZone[loc].s++; strikes++; } else { byZone[loc].b++; balls++; }
+    if (typeof p.speed === 'number') { totalSpeed += p.speed; speedCount++; }
+  }
+  const total = strikes + balls;
+  // 四角统计：1, 5, 21, 25（捕手视角左上/右上/左下/右下）+ 中线（11,13,15）
+  const corners = [0, 4, 20, 24];
+  const cornersStrike = corners.reduce((acc, loc) => acc + (byZone[loc]?.s || 0), 0);
+  const cornersBall   = corners.reduce((acc, loc) => acc + (byZone[loc]?.b || 0), 0);
+  const cornersTotal  = cornersStrike + cornersBall;
+  const mid = [10, 12, 14];
+  const midStrike = mid.reduce((acc, loc) => acc + (byZone[loc]?.s || 0), 0);
+  const midBall   = mid.reduce((acc, loc) => acc + (byZone[loc]?.b || 0), 0);
+  // 找命中率最高/最低的位置（仅给出球 ≥2 的）
+  const zoneStats = [];
+  for (let i = 0; i < 25; i++) {
+    const z = byZone[i];
+    if (!z) continue;
+    const t = z.s + z.b;
+    if (t < 2) continue;
+    zoneStats.push({ loc: i+1, hit: t ? Math.round(z.s/t*100) : 0, n: t });
+  }
+  zoneStats.sort((a,b) => b.hit - a.hit);
+  const top = zoneStats.slice(0, 2);
+  const bot = zoneStats.slice(-2).reverse();
+  return {
+    n: recent.length,
+    used: total,
+    strikeRate: total ? Math.round(strikes/total*100) : null,
+    avgSpeed: speedCount ? +(totalSpeed/speedCount).toFixed(1) : null,
+    corners: {
+      strike: cornersStrike,
+      ball: cornersBall,
+      total: cornersTotal,
+      hitRate: cornersTotal ? Math.round(cornersStrike/cornersTotal*100) : null
+    },
+    middle: {
+      strike: midStrike,
+      ball: midBall
+    },
+    topZones: top,
+    bottomZones: bot,
+    byZone
+  };
+}
+
 function buildContextText(action) {
   const ZH = LANG==='zh';
   const lines = [];
   const fmtDate = (d) => (d||'').slice(0,10);
   const num = (v, decimals=0) => (typeof v === 'number' && !isNaN(v)) ? (+v).toFixed(decimals) : '—';
   const arrOrEmpty = (arr) => Array.isArray(arr) ? arr : [];
-  // 取最近 5 条 logs（训练+比赛混合），按日期倒序
   const allLogs = arrOrEmpty(DATA.logs).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const recentLogs = allLogs.slice(0, 5);
-  const recentMatches = arrOrEmpty(DATA.logs).filter(l => l.type==='match').slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0, 3);
   const recentReflections = arrOrEmpty(DATA.reflections).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0, 3);
   const recentBody = arrOrEmpty(DATA.bodyLogs).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0, 3);
+  const zone = strikeZoneStats(30);
 
-  // ---- 头部
   lines.push(ZH ? '【近期训练与比赛数据（仅供精准参考，请勿编造）】' : '【Recent training/match data (ground truth, do not fabricate)】');
-
-  // ---- 1. 训练负荷概览（明确从 DATA 算的）
   if (recentLogs.length) {
     const speeds = recentLogs.map(l => l.speed).filter(s => typeof s==='number');
     const pitches = recentLogs.map(l => l.pitchCount).filter(p => typeof p==='number');
@@ -2320,12 +2372,11 @@ function buildContextText(action) {
     const totalPitches = pitches.reduce((a,b)=>a+b, 0);
     const avgMood = moods.length ? (moods.reduce((a,b)=>a+b,0)/moods.length).toFixed(1) : '—';
     lines.push(ZH ?
-      `近 ${recentLogs.length} 条记录：均速 ${avgSpeed} km/h（峰值 ${maxSpeed}），累计投球 ${totalPitches} 球，均信心 ${avgMood}/5。` :
+      `近 ${recentLogs.length} 条训练/比赛记录：均速 ${avgSpeed} km/h（峰值 ${maxSpeed}），累计投球 ${totalPitches} 球，均信心 ${avgMood}/5。` :
       `Last ${recentLogs.length} entries: avg ${avgSpeed} km/h (peak ${maxSpeed}), total ${totalPitches} pitches, avg confidence ${avgMood}/5.`);
     lines.push('');
   }
 
-  // ---- 2. 逐条明细
   if (recentLogs.length) {
     lines.push(ZH ? '— 明细 —' : '— Detail —');
     recentLogs.forEach(l => {
@@ -2363,7 +2414,6 @@ function buildContextText(action) {
     lines.push('');
   }
 
-  // ---- 3. 历史反思要点
   if (recentReflections.length) {
     lines.push(ZH ? '— 历史反思要点 —' : '— Past Reflections —');
     recentReflections.forEach(r => {
@@ -2376,7 +2426,33 @@ function buildContextText(action) {
     lines.push('');
   }
 
-  // ---- 4. 身体成长
+  // ===== 9 宫格统计 =====
+  if (zone && zone.used > 0) {
+    lines.push(ZH ? '— 9宫格统计（最近30球，按捕手视角1-25号位置）—' : '— 9-zone stats (last 30 pitches, catcher view loc 1-25) —');
+    lines.push(ZH ?
+      `共 ${zone.used} 球（${zone.n} 条记录中可用），整体好球率 ${zone.strikeRate}%。${zone.avgSpeed!==null?`平均球速 ${zone.avgSpeed} km/h。`:''}` :
+      `Total ${zone.used} pitches (from ${zone.n} records). Strike rate ${zone.strikeRate}%. ${zone.avgSpeed!==null?`Avg speed ${zone.avgSpeed} km/h.`:''}`);
+    if (zone.corners.total > 0) {
+      lines.push(ZH ?
+        `四角位置（1/5/21/25号）共 ${zone.corners.total} 球，好球 ${zone.corners.strike}、坏球 ${zone.corners.ball}，命中率 ${zone.corners.hitRate}%。` :
+        `Corners (loc 1/5/21/25): ${zone.corners.total} pitches, ${zone.corners.strike} strikes, ${zone.corners.ball} balls, hit rate ${zone.corners.hitRate}%.`);
+    }
+    if (zone.topZones.length) {
+      const t = zone.topZones.map(z => `${z.loc}号${z.hit}%(${z.n}球)`).join('、');
+      lines.push(ZH ? `最稳位置：${t}（好球率最高）。` : `Best zones: ${t}.`);
+    }
+    if (zone.bottomZones.length && zone.bottomZones[0].hit < zone.topZones[0]?.hit - 15) {
+      const b = zone.bottomZones.map(z => `${z.loc}号${z.hit}%(${z.n}球)`).join('、');
+      lines.push(ZH ? `最不稳位置：${b}。` : `Weakest zones: ${b}.`);
+    }
+    if (zone.middle.strike + zone.middle.ball > 0) {
+      lines.push(ZH ?
+        `中间位置（11/13/15号）共 ${zone.middle.strike+zone.middle.ball} 球，好球 ${zone.middle.strike}、坏球 ${zone.middle.ball}。` :
+        `Middle (loc 11/13/15): ${zone.middle.strike+zone.middle.ball} pitches, ${zone.middle.strike} strikes, ${zone.middle.ball} balls.`);
+    }
+    lines.push('');
+  }
+
   if (recentBody.length >= 2) {
     const first = recentBody[recentBody.length - 1];
     const last = recentBody[0];
@@ -2387,6 +2463,23 @@ function buildContextText(action) {
       `Body: height ${first.height}cm → ${last.height}cm (${dh>=0?'+':''}${dh}cm), weight ${first.weight}kg → ${last.weight}kg (${dw>=0?'+':''}${dw}kg).`);
     lines.push('');
   }
+
+  // 关键：明确告诉 AI 哪些数据是没给的，防止它"自己估"
+  lines.push(ZH ?
+    '【硬约束 · 重要】\n' +
+    '上面提供的所有数字均来自实记数据，请严格引用。\n' +
+    '以下指标在本期数据中**未给出**（不要说"大概""差不多"）：\n' +
+    '- 各次训练的具体肘角/髋肩分离角/躯干侧倾（仅本次视频给出）\n' +
+    '- 各次比赛的具体肘角\n' +
+    '- 不同位置各自的肘角均值\n' +
+    '如果 vs_recent / trend_note / load_note 需要谈"肘角均值""上次肘角"等，而上文未给数字，必须写"暂无该指标数据"。' :
+    '[HARD CONSTRAINT]\n' +
+    'All numbers above are from DATA. Cite exactly.\n' +
+    'The following are NOT given in this data — DO NOT estimate:\n' +
+    '- Per-session elbow/hip-shoulder/trunk angles (only THIS video has them)\n' +
+    '- Per-pitch elbow angles by zone\n' +
+    'If vs_recent/trend_note/load_note needs elbow avg and it\'s not provided, write "no data".'
+  );
 
   return lines.join('\n');
 }
@@ -2409,22 +2502,23 @@ function buildPrompts(action, angles) {
   const sysPrompt = ZH ?
     `你是12岁香港女孩莀安的棒球姐姐教练。她正在练${actionName}（${numFrames}帧姿态已提取）。\n` +
     `输出必须遵守的硬规则：\n` +
-    `1. 数据精准原则：所有数字必须严格来自下面的"视频姿态数据"和"近期训练与比赛数据"。如果某项数据没给出，直接说"暂无数据"，**绝不编造**数字、不要使用"大概""差不多""应该"等模糊词。\n` +
-    `2. 综合原则：要从"视频动作是否一致""动作与近期数据趋势是否匹配""训练负荷是否合理""心理信心是否到位"四个维度综合分析。\n` +
-    `3. 语气原则：温柔但严格，像姐姐陪练。不是客服，不要在鼓励话里使用"加油""你真棒""继续努力""最棒的你"等任何套话。\n` +
-    `4. 格式原则：严格按JSON输出，不要任何额外文字、Markdown、代码块标记。\n` +
-    `5. 长度原则：每条文字 ≤30字，每条建议要具体到动作或场景，不要泛泛而谈。` :
+    `1. 数据精准原则：所有数字必须严格来自下面的"视频姿态数据"和"近期训练与比赛数据"。如果某项数据没给出，写"暂无该指标数据"，**绝不编造**数字、不要使用"大概""差不多""应该""估计""可能"等模糊词。\n` +
+    `2. 综合原则：从 (a) 视频动作是否一致 (b) 9宫格好球率分布与视频动作的关系 (c) 训练负荷是否合理 (d) 信心与比赛表现变化 四个维度综合。\n` +
+    `3. 语气原则：温柔但严格，像姐姐陪练，不是客服。**严禁**"加油""你真棒""继续努力""最棒的你""棒棒哒""辛苦了"等任何套话。\n` +
+    `4. 鼓励语原则（重要）：encourage 字段要具备 4 个特征 — ①有具体时间点（比如"上周六"或"上次 vs 北区"），②提一件她刚做对的**具体**事（带数字、带日期、带位置编号皆可），③给一个**面向下次**的小约定或小承诺（不是泛泛"继续"），④10-30字内。**好例子**："上周六5个三振你最稳，这次投球稳多了，下次我们练6个敢不敢？" / "9/3 vs 北区你 5 个 K，这次姿势比当时稳，肩部撑住就对了。" / "姐姐留意到你最近早训多投了 20 球，明天休息日一起去海边？"。**反例**："继续加油！""你真棒！"。\n` +
+    `5. 格式原则：严格按JSON输出，不要任何额外文字、Markdown、代码块标记。\n` +
+    `6. 长度原则：每条文字 ≤30字，每条建议要具体到动作或场景。` :
     `You are a baseball coach for 12-year-old Chan An from Hong Kong, working on ${actionName} (${numFrames} pose frames extracted).\n` +
     `HARD RULES:\n` +
-    `1. Accuracy: All numbers MUST come from the provided "Pose data" and "Recent data" sections. If something is missing, say "no data" — NEVER fabricate numbers, no "around"/"roughly"/"maybe".\n` +
-    `2. Synthesis: Analyze across (a) video action, (b) consistency with recent training/match trends, (c) training-load reasonableness, (d) psychological confidence.\n` +
-    `3. Tone: warm but firm, like an older-sister coach. No cliches like "keep going", "you're amazing", "do your best" in encouragement.\n` +
-    `4. Format: STRICT JSON, no extra text, no markdown fences.\n` +
-    `5. Length: each string ≤30 chars; each tip must be specific to a motion or scene.`;
+    `1. Accuracy: All numbers MUST come from provided data. If missing, write "no data" — NEVER fabricate, never use "around"/"roughly"/"maybe"/"probably".\n` +
+    `2. Synthesis: combine (a) video pose, (b) 9-zone strike-rate vs motion, (c) training-load, (d) confidence trend.\n` +
+    `3. Tone: warm but firm, older-sister-coach. NO cliches ("keep going", "you're amazing", "do your best", etc.).\n` +
+    `4. Encourage principle: encourage MUST contain (i) a specific time anchor (date or match), (ii) one concrete thing she just did right (with a number, position, or date), (iii) a small commitment or invitation for the next session (not generic "continue"). 10-30 chars. Good: "Last Sat you struck out 5 vs North Zone — this pose was steadier than then. Let's hit 6 next time?" Bad: "Keep going! You got this!".\n` +
+    `5. Format: STRICT JSON, no extra text, no markdown fences.\n` +
+    `6. Length: each string ≤30 chars; each tip must be specific to a motion or scene.`;
 
-  // 用户 prompt：明确两段数据 + 明确输出要求
   const userPrompt = ZH ?
-    `## 视频姿态数据（关键 4-5 个数字）\n` +
+    `## 视频姿态数据\n` +
     `- 帧数：${numFrames}\n` +
     `- 出手瞬间肘角：${elbowAtRelease}°（理想 ~180°）\n` +
     `- 全程最大肘角：${elbowMax}°\n` +
@@ -2438,13 +2532,14 @@ function buildPrompts(action, angles) {
     `  "pose_score": <0-100 整数，仅基于视频姿态>,\n` +
     `  "pose_problem": "<30字内，指出本次视频最需改的1个动作环节>",\n` +
     `  "pose_tips": ["<动作相关练1>", "<动作相关练2>", "<动作相关练3>"],\n` +
-    `  "vs_recent": "<40字内，把本次姿态与近期均值对比，标注是更好、持平、还是退步，并给出具体数字来源>",\n` +
+    `  "vs_recent": "<40字内，把本次姿态与近期均值对比。如果某指标近期数据中未给肘角，必须写"暂无该指标数据"以坦诚替代，**禁止补全或合理推算**。>",\n` +
+    `  "zone_note": "<35字内，结合近期9宫格统计（如有）说1-2个最稳/最不稳的位置编号+好球率，给出对应投球策略建议。无数据时写"暂无9宫格数据">',\n` +
     `  "trend_note": "<30字内，对近期训练/比赛趋势的观察（频次/强度/信心变化）>",\n` +
     `  "load_note": "<30字内，对当前训练负荷的提醒（是否过多/过少，是否需要恢复）>",\n` +
-    `  "tips": ["<综合练1（动作或训练或心理）>", "<综合练2>", "<综合练3>"],\n` +
-    `  "encourage": "<30字内，对莀安具体的温暖鼓励，要提到她最近一次做对的事，禁止用空话套话>"\n` +
+    `  "tips": ["<综合练1（动作或战术或心理）>", "<综合练2>", "<综合练3>"],\n` +
+    `  "encourage": "<10-30字，具体时间点+一件做对的事+下次的小约定/承诺，禁止套话>"\n` +
     `}` :
-    `## Video pose data (4-5 key numbers)\n` +
+    `## Video pose data\n` +
     `- Frames: ${numFrames}\n` +
     `- Elbow at release: ${elbowAtRelease}° (ideal ~180°)\n` +
     `- Max elbow: ${elbowMax}°\n` +
@@ -2453,16 +2548,17 @@ function buildPrompts(action, angles) {
     (stanceMax > 0 ? `- Stance width: ${stanceMax}px\n` : '') +
     `\n## Recent training/match data\n${ctx}\n` +
     (ctxNote ? `\n${ctxNote}\n` : '') +
-    `\nOutput STRICT JSON only (no extra text, no markdown fences):\n` +
+    `\nOutput STRICT JSON only:\n` +
     `{\n` +
     `  "pose_score": <int 0-100, pose only>,\n` +
-    `  "pose_problem": "<≤30 chars, the #1 motion issue from the video>",\n` +
+    `  "pose_problem": "<≤30 chars, #1 motion issue>",\n` +
     `  "pose_tips": ["<motion tip1>", "<motion tip2>", "<motion tip3>"],\n` +
-    `  "vs_recent": "<≤40 chars, compare this video to recent avg, label BETTER/SAME/REGRESSED, give specific source numbers>",\n` +
-    `  "trend_note": "<≤30 chars, observation on recent training/match frequency/intensity/confidence>",\n` +
-    `  "load_note": "<≤30 chars, load warning (over-trained / undertrained / recovery)?>",\n` +
-    `  "tips": ["<synthesis tip1 (motion or training or mental)>", "<tip2>", "<tip3>"],\n` +
-    `  "encourage": "<≤30 chars, mention one specific thing she did well recently, no cliches>"\n` +
+    `  "vs_recent": "<≤40 chars, compare to recent avg. If a metric is not given in the data, write "no data for this metric" — DO NOT estimate or rationalize.>",\n` +
+    `  "zone_note": "<≤35 chars, 1-2 zones (loc id + hit rate) + tactical advice. "no 9-zone data" if absent>",\n` +
+    `  "trend_note": "<≤30 chars, recent trend (freq/intensity/confidence)>",\n` +
+    `  "load_note": "<≤30 chars, load warning>",\n` +
+    `  "tips": ["<synthesis tip1>", "<tip2>", "<tip3>"],\n` +
+    `  "encourage": "<10-30 chars, time anchor + concrete right-doing + next-step invitation, no cliches>"\n` +
     `}`;
 
   return { sysPrompt, userPrompt };
@@ -2489,6 +2585,7 @@ function parseLLMJson(text, fallback) {
       problem: { label: fallback.problem.label, msg: String(parsed.pose_problem||fallback.problem.msg) },
       pose_tips,
       vs_recent: String(parsed.vs_recent || (LANG==='zh'?'暂无近期数据参考':'No recent data')),
+      zone_note: String(parsed.zone_note || ''),
       trend_note: String(parsed.trend_note || ''),
       load_note: String(parsed.load_note || ''),
       tips,
@@ -2632,7 +2729,7 @@ function resultHTML() {
   const svHS = angStrip(AI.angles.map(a=>a&&a.hipShoulder), '#a78bfa');
   const svTrunk = angStrip(AI.angles.map(a=>a&&a.trunkTilt), '#34d399');
   const isSwing = AI.action === 'swing';
-  const hasRecent = (ev.vs_recent && ev.vs_recent.length > 0) || (ev.trend_note && ev.trend_note.length > 0);
+  const hasRecent = (ev.vs_recent && ev.vs_recent.length > 0) || (ev.trend_note && ev.trend_note.length > 0) || (ev.zone_note && ev.zone_note.length > 0);
   const sourceBanner = AI.feedbackSource==='cloud'
     ? `<div style="background:linear-gradient(90deg,#7c3aed,#a855f7);color:#fff;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:10px"><b>${t('ai_using_gemini')} · ${llmLabel()}</b></div>`
     : AI.feedbackSource==='mock-fallback'
@@ -2668,6 +2765,7 @@ function resultHTML() {
   if (hasRecent || AI.feedbackSource==='cloud') {
     const cells = [];
     if (ev.vs_recent) cells.push({ k: t('ai_vs_recent_title'), v: ev.vs_recent, c: '#7dd3fc' });
+    if (ev.zone_note) cells.push({ k: t('ai_zone_title')||(ZH?'📍 9宫格战术':'📍 9-Zone'), v: ev.zone_note, c: '#fb923c' });
     if (ev.trend_note) cells.push({ k: t('ai_trend_title'), v: ev.trend_note, c: '#86efac' });
     if (ev.load_note)  cells.push({ k: t('ai_load_title'),  v: ev.load_note, c: '#fcd34d' });
     compareBlock = `
@@ -2768,6 +2866,7 @@ function bindResult() {
     const lines = [];
     lines.push(`${srcTag} · ${ZH ? '动作评分' : 'Score'} ${ev.score}/100`);
     if (ev.vs_recent) lines.push(`📊 ${ZH?'近期对比':'vs recent'}: ${ev.vs_recent}`);
+    if (ev.zone_note) lines.push(`📍 ${ZH?'9宫格战术':'9-Zone'}: ${ev.zone_note}`);
     if (ev.trend_note) lines.push(`📈 ${ZH?'趋势':'Trend'}: ${ev.trend_note}`);
     if (ev.load_note) lines.push(`⚖️ ${ZH?'负荷':'Load'}: ${ev.load_note}`);
     const r = {
@@ -2797,7 +2896,7 @@ window.bindAIStartBtn = function() {
 <div id="aiModal">
   <div class="top-bar">
     <button class="x-btn" onclick="closeAICoach()">✕</button>
-    <h3>🤖 AI Video Coach <span class="pill" style="margin-left:8px;background:#7c3aed;color:#f5f3ff">v8.2 综合</span></h3>
+    <h3>🤖 AI Video Coach <span class="pill" style="margin-left:8px;background:#7c3aed;color:#f5f3ff">v8.3 9宫格</span></h3>
   </div>
   <div class="step-area" id="aiRoot"></div>
   <input type="file" id="aiPicker" accept="video/*" style="display:none" onchange="pickFromAlbum(this.files[0])">
