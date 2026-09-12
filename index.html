@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Baseball Growth Coach · 莀安 Demo v8.8 (录像≤15秒+手动开始/结束)</title>
+<title>Baseball Growth Coach · 莀安 Demo v8.9 (拍照tips+录像≤15秒+手动)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -437,6 +437,19 @@ const I18N = {
   ai_btn_start_rec: { zh:'⏺ 开始录制', en:'⏺ Start' },
   ai_btn_stop_rec: { zh:'⏹ 结束录制', en:'⏹ Stop' },
   ai_rec_ready: { zh:'准备好就开始', en:'Ready to record' },
+
+  // v8.9：拍摄提示
+  shooting_tips_title: { zh:'📖 拍摄提示——这样拍 AI 分析更准', en:'📖 Shooting tips — for best AI analysis' },
+  shooting_tip1: { zh:'侧面 90° 机位', en:'Side view (90°)' },
+  shooting_tip1d: { zh:'投手左/右侧面 90°，能看清完整出手动作。', en:'Pitcher left/right side, 90°, see full release motion.' },
+  shooting_tip2: { zh:'身体全部入镜', en:'Whole body in frame' },
+  shooting_tip2d: { zh:'从头顶到脚尖都要看到，肩上留 20% 空间。', en:'Head to feet visible, ~20% headroom.' },
+  shooting_tip3: { zh:'固定手机', en:'Stabilize the phone' },
+  shooting_tip3d: { zh:'三脚架或靠墙固定，否则 AI 检测会丢失骨骼。', en:'Tripod or lean against a wall — shaky video breaks pose tracking.' },
+  shooting_tip4: { zh:'光线充足', en:'Good lighting' },
+  shooting_tip4d: { zh:'避免背光，阴影不能遮挡脸部和手臂。', en:'No backlight; face & arms in shadow break detection.' },
+  shooting_tip5: { zh:'先静止 2-3 秒', en:'Hold still 2-3 seconds' },
+  shooting_tip5d: { zh:'投手就位后先静止 2-3 秒给 AI 锁定身体，再开投。', en:'Stand still 2-3s before pitching so AI can lock on.' },
   ai_load_video: { zh:'读取视频中…', en:'Loading video...' },
   ai_load_model: { zh:'首次加载 MediaPipe 模型（约 5 MB，需 5-15 秒）…', en:'Loading MediaPipe model (~5MB, 5-15s first time)...' },
   ai_extract: { zh:'抽取关键帧（每 100ms 一帧）…', en:'Extracting keyframes (every 100ms)...' },
@@ -2141,13 +2154,29 @@ function bindStep1() {
 
 function step2HTML() {
   const back = (act) => `<div class="opt-btn" data-act="${act}">${act==='record'?t('ai_record'):t('ai_upload')}</div>`;
+  const tipItem = (n) => `
+    <div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid rgba(148,163,184,.2)">
+      <div style="color:#fbbf24;font-size:18px;font-weight:700;min-width:22px;text-align:center">${n}</div>
+      <div style="flex:1">
+        <div style="color:#e2e8f0;font-size:13px;font-weight:600;margin-bottom:2px">${t('shooting_tip'+n)}</div>
+        <div style="color:#94a3b8;font-size:11px;line-height:1.5">${t('shooting_tip'+n+'d')}</div>
+      </div>
+    </div>`;
   return `<div class="step-card">
     <span class="step-num">${t('ai_step2')}</span>
     <div class="opt-grid">
       <div class="opt-btn" data-act="record">${t('ai_record')}</div>
       <div class="opt-btn" data-act="upload">${t('ai_upload')}</div>
     </div>
-    <div style="margin-top:14px"><button class="opt-btn" style="background:transparent;border:none;color:#94a3b8;font-size:12px" id="aiBack1">← ${t('ai_back')}</button></div>
+    <details style="margin-top:14px;background:rgba(255,255,255,.04);border:1px solid rgba(251,191,36,.3);border-radius:10px;overflow:hidden">
+      <summary style="padding:12px 14px;color:#fbbf24;font-size:13px;font-weight:600;cursor:pointer;list-style:none;user-select:none">
+        ${t('shooting_tips_title')} <span style="font-size:11px;color:#94a3b8;font-weight:400">（点击展开 / Click to expand）</span>
+      </summary>
+      <div style="padding:8px 14px 12px">
+        ${tipItem(1)}${tipItem(2)}${tipItem(3)}${tipItem(4)}${tipItem(5)}
+      </div>
+    </details>
+    <div style="margin-top:12px"><button class="opt-btn" style="background:transparent;border:none;color:#94a3b8;font-size:12px" id="aiBack1">← ${t('ai_back')}</button></div>
   </div>`;
 }
 function bindStep2() {
