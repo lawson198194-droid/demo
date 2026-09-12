@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Baseball Growth Coach · 莀安 Demo v8.7 (清空按钮+无示例种子)</title>
+<title>Baseball Growth Coach · 莀安 Demo v8.8 (录像≤15秒+手动开始/结束)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -430,9 +430,12 @@ const I18N = {
   ai_pitch: { zh:'⛳ 投球', en:'⛳ Pitching' },
   ai_swing: { zh:'🏏 打击', en:'🏏 Batting' },
   ai_step2: { zh:'第 2 步：选择视频源', en:'Step 2: Choose video source' },
-  ai_record: { zh:'🎥 录像（≤30 秒，自动停止）', en:'🎥 Record (≤30s, auto-stop)' },
+  ai_record: { zh:'🎥 录像（≤15 秒，手动控制）', en:'🎥 Record (≤15s, manual control)' },
   ai_upload: { zh:'📁 从相册选', en:'📁 Pick from album' },
   ai_recording: { zh:'● 正在录像…保持动作，不要移动手机', en:'● Recording... hold the phone still' },
+  ai_rec_pre: { zh:'准备好就开始——按「⏺ 开始」投球，按「⏹ 结束」停止（≤15 秒）', en:'Ready — press ⏺ Start to record, ⏹ Stop to finish (≤15s)' },
+  ai_btn_start_rec: { zh:'⏺ 开始录制', en:'⏺ Start' },
+  ai_btn_stop_rec: { zh:'⏹ 结束录制', en:'⏹ Stop' },
   ai_rec_ready: { zh:'准备好就开始', en:'Ready to record' },
   ai_load_video: { zh:'读取视频中…', en:'Loading video...' },
   ai_load_model: { zh:'首次加载 MediaPipe 模型（约 5 MB，需 5-15 秒）…', en:'Loading MediaPipe model (~5MB, 5-15s first time)...' },
@@ -2165,15 +2168,20 @@ function recordingHTML() {
   return `<div class="step-card">
     <span class="step-num"><span class="rec-dot"></span>${t('ai_recording')}</span>
     <div class="vid-wrap"><video id="aiRecVid" autoplay playsinline muted></video></div>
-    <p style="text-align:center;color:#fbbf24;font-size:18px;font-weight:700;margin-top:8px" id="aiCountdown">30</p>
+    <p style="text-align:center;color:#94a3b8;font-size:13px;margin-top:6px" id="aiRecHint">${t('ai_rec_pre')}</p>
+    <p style="text-align:center;color:#fbbf24;font-size:18px;font-weight:700;margin-top:6px" id="aiCountdown" style="display:none">15</p>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
+      <button class="opt-btn" id="aiStartRecBtn" style="background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;font-size:15px;padding:12px 24px;flex:1;max-width:200px">${t('ai_btn_start_rec')}</button>
+      <button class="opt-btn" id="aiStopRecBtn" style="background:linear-gradient(135deg,#475569,#1e293b);color:#fff;font-size:15px;padding:12px 24px;flex:1;max-width:200px;opacity:.5;pointer-events:none" disabled>${t('ai_btn_stop_rec')}</button>
+    </div>
   </div>`;
 }
 
 function startRecording() {
+  // v8.8：先打开摄像头显示预览；不立即启动 MediaRecorder，等用户按「⏺ 开始」
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     toast(t('ai_err_camera')+'no mediaDevices'); AI.state='choose-source'; renderAIStep(); return;
   }
-  // v8.6：默认调用后摄像头（出投手上手侧面视角能看到完整动作）；老设备不支持则降级到任意摄像头
   navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}, audio:false})
     .catch(() => navigator.mediaDevices.getUserMedia({video:true, audio:false}))
     .then(stream => {
@@ -2193,25 +2201,43 @@ function startRecording() {
         AI.state = 'loading-video';
         renderAIStep();
       };
-      _aiRecorder.start();
-      // v8.6：30 秒倒计时显示剩余秒数；最后 10 秒变橙、最后 5 秒变红
-      let remain = 30;
-      const cd = document.getElementById('aiCountdown');
-      const tick = () => {
-        if (cd) {
-          cd.textContent = remain;
-          cd.style.color = remain <= 5 ? '#dc2626' : remain <= 10 ? '#fb923c' : '#fbbf24';
-        }
-        if (remain > 0) { remain--; setTimeout(tick, 1000); }
-      };
-      tick();
-      setTimeout(() => { if (_aiRecorder && _aiRecorder.state==='recording') _aiRecorder.stop(); }, 30100);
+      bindRecControls();
     })
     .catch(err => {
       toast(t('ai_err_camera')+err.message);
       AI.state='choose-source';
       renderAIStep();
     });
+}
+
+function bindRecControls() {
+  document.getElementById('aiStartRecBtn').onclick = beginCapture;
+  document.getElementById('aiStopRecBtn').onclick = () => {
+    if (_aiRecorder && _aiRecorder.state==='recording') _aiRecorder.stop();
+  };
+}
+
+function beginCapture() {
+  if (!_aiRecorder || _aiRecorder.state !== 'inactive') return;
+  _aiRecorder.start();
+  // 按钮状态切换
+  const startBtn = document.getElementById('aiStartRecBtn');
+  const stopBtn = document.getElementById('aiStopRecBtn');
+  if (startBtn) { startBtn.style.opacity = '.5'; startBtn.style.pointerEvents = 'none'; startBtn.disabled = true; }
+  if (stopBtn)  { stopBtn.style.opacity = '1'; stopBtn.style.pointerEvents = 'auto'; stopBtn.disabled = false; }
+  const hint = document.getElementById('aiRecHint'); if (hint) hint.style.display = 'none';
+  const cd = document.getElementById('aiCountdown'); if (cd) cd.style.display = 'block';
+  // v8.8：15 秒倒计时仅作上限兜底；用户随时可手动结束
+  let remain = 15;
+  const tick = () => {
+    if (cd) {
+      cd.textContent = remain;
+      cd.style.color = remain <= 3 ? '#dc2626' : remain <= 5 ? '#fb923c' : '#fbbf24';
+    }
+    if (remain > 0) { remain--; setTimeout(tick, 1000); }
+  };
+  tick();
+  setTimeout(() => { if (_aiRecorder && _aiRecorder.state==='recording') _aiRecorder.stop(); }, 15100);
 }
 
 function loadingHTML() {
