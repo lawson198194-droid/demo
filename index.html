@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Baseball Growth Coach · 莀安 Demo v8.9 (拍照tips+录像≤15秒+手动)</title>
+<title>Baseball Growth Coach · 莀安 Demo v9.0 (语音zh-CN+本周累计+拍摄tips)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -843,7 +843,9 @@ function savePitchSession() {
   if (hitsAllowed !== '' || soThrown !== '') logEntry.note += ` · 被安打 ${hitsAllowed || 0} · 投出三振 ${soThrown || 0}`;
   DATA.logs.push(logEntry);
   saveData(DATA);
-  toast(`✓ ${LANG==='zh'?'已记录为训练':'Saved as training'} · ${n} ${LANG==='zh'?'球':'p'}`);
+  // v9.0：明确反馈 — 保存即「一次训练」+ 显示本周累计球数
+  const weekTotal = pitchesThisWeek();
+  toast(`✓ ${LANG==='zh'?'已记为训练':'Saved as training'} · ${n}${LANG==='zh'?'球':'p'} · ${LANG==='zh'?'本周累计':'week total'} ${weekTotal}${LANG==='zh'?'球':'p'}`);
   closeModal('pitchModal');
   render();
 }
@@ -961,29 +963,44 @@ function useGPS() {
 }
 function clearGPS() { form.location = null; render(); }
 
-// 语音识别（按 field name 区分）
+// v9.0：语音识别（修复 zh-HK→zh-CN + 累加 bug + 连续模式 + 清理空格）
 let recog = null;
 let isRecording = false;
 let voiceField = null;
+let _voiceBaseValue = '';   // 录音前的 textarea 值
+let _voiceFinalText = '';   // 累积的所有 final 段（不会重复）
+// 简单清理：去掉多余空格 + 修正常见错别
+function cleanupVoiceText(s) {
+  let out = (s || '').replace(/\s+/g, ' ').trim();
+  return out;
+}
 function startVoice(field) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { toast(t('mic_no')); return; }
   if (isRecording) { stopVoice(); return; }
   voiceField = field;
+  const ta = document.getElementById('f_'+field);
+  if (!ta) { toast('field not found: '+field); return; }
+  // 记录当前 textarea 内容（不要清空，让语音内容追加在后面）
+  _voiceBaseValue = ta.value || '';
+  _voiceFinalText = '';
   recog = new SR();
-  recog.lang = LANG==='zh' ? 'zh-HK' : 'en-US';
+  recog.lang = LANG==='zh' ? 'zh-CN' : 'en-US';   // 普通话，不是粤语
   recog.interimResults = true;
-  recog.continuous = false;
-  let finalText = '';
+  recog.continuous = true;                         // 支持连续说话
+  recog.maxAlternatives = 1;
   recog.onresult = (e) => {
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const txt = e.results[i][0].transcript;
-      if (e.results[i].isFinal) finalText += txt;
-      else interim += txt;
+      if (e.results[i].isFinal) {
+        _voiceFinalText += txt;   // final 仅追加，不再叠加整体
+      } else {
+        interim += txt;
+      }
     }
-    const ta = document.getElementById('f_'+voiceField);
-    if (ta) ta.value = (ta.value || '') + (finalText + interim);
+    // 重渲染 = 基线 + final 累积 + interim（实时预览）。绝不再叠层
+    ta.value = cleanupVoiceText(_voiceBaseValue + _voiceFinalText + interim);
   };
   recog.onerror = (e) => {
     console.warn('recog err', e);
@@ -992,11 +1009,12 @@ function startVoice(field) {
   };
   recog.onend = () => {
     isRecording = false; updateMicBtn(voiceField);
-    if (finalText) {
+    if (voiceField) {
+      // 同步到表单数据
       if (voiceField === 'note') form.note = document.getElementById('f_note').value;
       else reflectForm[voiceField] = document.getElementById('f_'+voiceField).value;
       saveData(DATA);
-      toast(t('mic_done'));
+      toast(t('mic_done') + (LANG==='zh'?'，请人工核对一下':' (please review)'));
     }
     voiceField = null;
   };
