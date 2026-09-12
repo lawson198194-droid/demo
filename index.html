@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Baseball Growth Coach · 莀安 Demo v9.1 (投球快计日期+保存弹窗+语音修复)</title>
+<title>Baseball Growth Coach · 莀安 Demo v9.2 (版本显示+自动更新检测)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -220,10 +220,17 @@
   #aiModal .pill.warn { background:#7c2d12; color:#fed7aa; }
   #aiModal .pill.ok { background:#14532d; color:#bbf7d0; }
   #aiModal .err { color:#fca5a5; padding:10px; background:#7f1d1d40; border-radius:8px; margin:10px 0; }
+  /* v9.2：版本更新提示条（检测到服务器有新版本时出现） */
+  .update-banner { display:none; margin:6px 10px 8px; padding:10px 12px; border-radius:10px;
+    background:linear-gradient(135deg,#f59e0b,#f97316); color:#fff; font-size:12px; font-weight:700;
+    text-align:center; cursor:pointer; box-shadow:0 3px 10px rgba(245,158,11,.45); line-height:1.5; }
+  .update-banner.show { display:block; animation:ubPulse 1.6s ease-in-out infinite; }
+  @keyframes ubPulse { 0%,100%{opacity:1} 50%{opacity:.72} }
+  .ver-line { text-align:center; font-size:10px; color:#94a3b8; padding:10px 0 2px; letter-spacing:.3px; }
 </style>
 </head>
 <body>
-<div class="desktop-hint">💡 数据自动保存到本机 · 在 Mac/iPhone 打开体验最佳</div>
+<div class="desktop-hint">💡 数据自动保存到本机 · 在 Mac/iPhone 打开体验最佳 · <b id="deskVer">v9.2</b></div>
 <div class="lang-switch">
   <button id="langZh" class="on" onclick="setLang('zh')">中</button>
   <button id="langEn" onclick="setLang('en')">EN</button>
@@ -235,6 +242,8 @@
     <span id="clk">9:41</span>
     <span>📶 🔋</span>
   </div>
+
+  <div class="update-banner" id="updateBanner" onclick="hardReload()"></div>
 
   <div class="screen" id="screen"></div>
 
@@ -360,6 +369,10 @@
 <script>
 const KEY = 'baseball_growth_coach_v6';
 let LANG = localStorage.getItem('bgc_lang') || 'zh';
+// v9.2：版本标识 —— 用于「你在看的是不是最新版」判断 + 自动更新检测
+const APP_VER = 'v9.2';
+const APP_BUILD = '2026-09-12.2220';
+let _lastVerCheck = 0;
 
 // 9宫格位置编号（0-24，5x5）
 // 中间 3x3 = 6,7,8,11,12,13,16,17,18 = strike zone
@@ -437,6 +450,17 @@ const I18N = {
   wipe_all_confirm: { zh:'确认清空所有训练/比赛/身体/反思数据？\\n\\nLLM Key 会保留。', en:'Wipe all train/match/body/reflection data?\\n\\nLLM Key will be kept.' },
   wipe_all_done: { zh:'✓ 已清空（LLM Key 已保留）', en:'✓ Wiped clean (LLM Key kept)' },
   wipe_all_status: { zh:'状态：已从零开始（无示例数据）', en:'Status: wiped clean (no demo seed)' },
+  // v9.2：版本 / 更新检测
+  ver_card: { zh:'📦 版本', en:'📦 Version' },
+  ver_current: { zh:'当前版本', en:'Current version' },
+  ver_check: { zh:'🔄 检查更新', en:'🔄 Check update' },
+  ver_checking: { zh:'⏳ 正在检查…', en:'⏳ Checking...' },
+  ver_latest: { zh:'✓ 已是最新版本', en:'✓ You are on the latest' },
+  ver_outdated: { zh:'⚠️ 服务器已更新到 {v}，点下方按钮升级', en:'⚠️ Server has {v} — tap below to update' },
+  ver_fail: { zh:'查不到（可能离线或网络受限）', en:'Check failed (offline or blocked)' },
+  ver_force: { zh:'🚀 强制刷新到最新版', en:'🚀 Force reload latest' },
+  ver_banner: { zh:'🚀 有新版本 {v} — 点这里立即更新', en:'🚀 New version {v} — tap to update' },
+  ver_hint: { zh:'页面显示不对/没更新时，先点这里', en:'Tap here when the app looks stale' },
   me_profile: { zh:'👤 个人信息', en:'👤 Profile' }, name: { zh:'姓名', en:'Name' }, title: { zh:'身份', en:'Title' },
   birth: { zh:'生日', en:'Birthday' }, fill_birth: { zh:'填生日后自动算年龄', en:'Add birthday to auto-calc age' },
   me_body: { zh:'📐 身体数据', en:'📐 Body Data' }, add_body: { zh:'记录一次', en:'Log Once' },
@@ -1165,6 +1189,7 @@ function renderHome(s) {
         <div style="font-size:22px;font-weight:800;color:#dc2626">${last.speed}</div>
       </div>` : `<div class="empty">${t('empty')}</div>`}
     </div>
+    <div class="ver-line">${APP_VER} · build ${APP_BUILD}</div>
   `;
 }
 
@@ -2021,6 +2046,19 @@ function renderMe(s) {
         <button class="btn ghost" id="seedReloadBtn" style="font-size:12px;padding:9px">🌱 ${LANG==='zh'?'重载示例':'Reload Seed'}</button>
       </div>
     </div>
+    <div class="card" id="verCard" style="background:linear-gradient(135deg,#f8fafc,#eef2ff);border-color:#c7d2fe">
+      <h3 style="color:#3730a3">${t('ver_card')}</h3>
+      <div style="font-size:12px;color:#475569;line-height:1.9">
+        ${t('ver_current')}：<b style="color:#1e40af">${APP_VER}</b><br>
+        build：<code style="background:#e0e7ff;padding:1px 6px;border-radius:4px;font-size:11px">${APP_BUILD}</code><br>
+        ${t('ver_hint')}
+      </div>
+      <div id="verStatus" style="font-size:11px;color:#475569;margin-top:8px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn ghost" id="verCheckBtn" style="font-size:12px;padding:9px;flex:1">${t('ver_check')}</button>
+        <button class="btn" id="verForceBtn" style="font-size:12px;padding:9px;flex:1;background:linear-gradient(135deg,#4f46e5,#6366f1)">${t('ver_force')}</button>
+      </div>
+    </div>
   `;
   document.getElementById('p_name').onchange = e => { DATA.profile.name = e.target.value; saveData(DATA); toast('✓ '+(LANG==='zh'?'已保存':'Saved')); };
   document.getElementById('p_title').onchange = e => { DATA.profile.title = e.target.value; saveData(DATA); toast('✓ '+(LANG==='zh'?'已保存':'Saved')); };
@@ -2059,6 +2097,15 @@ function renderMe(s) {
   };
   bindLLMSettings();
   bindSuccessModal();
+  // v9.2：版本卡按钮
+  const verCheckBtn = document.getElementById('verCheckBtn');
+  if (verCheckBtn) {
+    verCheckBtn.onclick = () => { setVerStatus(t('ver_checking'), '#7c3aed'); checkForUpdate(true); };
+    // 进「我」标签时自动补一次状态（30 秒内不重复请求）
+    if (Date.now() - _lastVerCheck > 30000) { _lastVerCheck = Date.now(); checkForUpdate(true); }
+  }
+  const verForceBtn = document.getElementById('verForceBtn');
+  if (verForceBtn) verForceBtn.onclick = () => hardReload();
 }
 
 // ===== v8: LLM 多 provider 设置卡 绑定 =====
@@ -2130,9 +2177,45 @@ function bindLLMSettings() {
 
 function go(tab) { currentTab = tab; render(); }
 
+// ===== v9.2：版本标识 / 更新检测 =====
+// 背景：GitHub Pages 默认给 HTML 10 分钟缓存，手机上很难判断自己看的是新版还是老版。
+// 方案：内嵌 build 号 + 部署一份极小的 version.txt，页面加载后比对；不一致就顶部弹条，一键跳带 ?u= 的地址绕过缓存。
+function hardReload() {
+  location.replace(location.pathname + '?u=' + Date.now());
+}
+function setVerStatus(msg, color) {
+  const el = document.getElementById('verStatus');
+  if (el) { el.textContent = msg; el.style.color = color || '#475569'; }
+}
+function showUpdateBanner(remoteVer) {
+  const el = document.getElementById('updateBanner');
+  if (!el) return;
+  el.textContent = t('ver_banner', { v: remoteVer });
+  el.classList.add('show');
+}
+function checkForUpdate(manual) {
+  return fetch('./version.txt?t=' + Date.now(), { cache:'no-store' })
+    .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(txt => {
+      const remote = (txt || '').trim();
+      if (!remote) throw new Error('empty version.txt');
+      if (remote !== APP_BUILD) {
+        showUpdateBanner(remote);
+        if (manual) setVerStatus(t('ver_outdated', { v: remote }), '#b45309');
+      } else {
+        const el = document.getElementById('updateBanner');
+        if (el) el.classList.remove('show');
+        if (manual) setVerStatus(t('ver_latest'), '#16a34a');
+      }
+    })
+    .catch(() => { if (manual) setVerStatus(t('ver_fail'), '#dc2626'); });
+}
+
 setInterval(()=>{ document.getElementById('clk').textContent = new Date().toTimeString().slice(0,5); }, 1000);
 if (LANG === 'en') { document.getElementById('langZh').classList.remove('on'); document.getElementById('langEn').classList.add('on'); document.documentElement.lang = 'en'; }
 render();
+checkForUpdate();   // v9.2：后台静默比对 version.txt，有新版顶部弹条
+(function(){ const dv = document.getElementById('deskVer'); if (dv) dv.textContent = APP_VER + ' · ' + APP_BUILD; })();
 // ===== v7 AI Coach 视频分析模块 =====
 const MP_LIB = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
 const MP_WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
