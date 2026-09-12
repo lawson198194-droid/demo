@@ -260,9 +260,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/></svg>
       <span data-t="tab_chart">曲线</span>
     </div>
-    <div class="tab" data-tab="review" onclick="go('review')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
-      <span data-t="tab_review">复盘</span>
+    <!-- v9.3：复盘模块取消（复盘挂在每条记录后面），AI教练独立成 tab -->
+    <div class="tab" data-tab="ai" onclick="go('ai')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="9" width="16" height="11" rx="3"/><circle cx="9" cy="14.5" r="1.4"/><circle cx="15" cy="14.5" r="1.4"/><path d="M12 9V6M9 4h6"/></svg>
+      <span data-t="tab_ai">AI教练</span>
     </div>
     <div class="tab" data-tab="me" onclick="go('me')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>
@@ -287,14 +288,14 @@
     </div>
     <div class="field">
       <label id="pmLblDate" style="display:flex;justify-content:space-between;align-items:center">
-        <span>${t('pm_date')}</span>
-        <button type="button" id="pmDateToday" style="background:#dbeafe;color:#1e40af;border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer">${LANG==='zh'?'📅 今天':'📅 Today'}</button>
+        <span id="pmDateLbl">训练日期（可改、补录历史）</span>
+        <button type="button" id="pmDateToday" style="background:#dbeafe;color:#1e40af;border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer">📅 今天</button>
       </label>
       <input type="date" id="pm_date" max="">
     </div>
     <div class="field">
       <label id="lblPitchSpeed">球速 (km/h)</label>
-      <input type="number" id="pm_speed" min="50" max="120" placeholder="${LANG==='zh'?'如：80（可空）':'e.g. 80 (optional)'}">
+      <input type="number" id="pm_speed" min="50" max="120" placeholder="如：80（可空）">
     </div>
     <div style="font-size:11px;color:#475569;font-weight:600;margin:8px 0 4px;border-top:1px dashed #cbd5e1;padding-top:8px" id="pmSummaryTitle">📋 本场汇总（可留空）</div>
     <div class="row" style="gap:8px">
@@ -364,14 +365,62 @@
   </div>
 </div>
 
+<!-- v9.3 弹层：GC（GameChanger）比赛 PDF 导入 -->
+<div class="modal-mask" id="gcModal">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>📄 <span id="gcModalTitle">导入比赛数据（GC PDF）</span></h2>
+      <span class="modal-close" onclick="closeModal('gcModal')">×</span>
+    </div>
+    <p style="font-size:12px;color:#475569;margin-bottom:10px" id="gcHelp">
+      选择 GameChanger 导出的比赛 PDF，本机本地解析（不上传任何数据），自动识别日期 / 比分 / 投球数等字段，识别不到的可手动补。也可直接粘贴 PDF 里的文字测试。
+    </p>
+    <div class="field">
+      <label>📂 选择 PDF 文件</label>
+      <input type="file" id="gcFile" accept=".pdf">
+    </div>
+    <div class="field">
+      <label>或粘贴 PDF 文本</label>
+      <textarea id="gcText" style="height:90px;font-family:Menlo,monospace;font-size:11px" placeholder="把 GC PDF 里的文字复制粘贴到这里"></textarea>
+    </div>
+    <button class="btn ghost" id="parseGc" style="font-size:12px;padding:10px;margin-bottom:10px">🔍 解析预览</button>
+    <div class="csv-preview" id="gcPreview" style="display:none"></div>
+    <div id="gcForm" style="display:none">
+      <div style="font-size:11px;color:#475569;font-weight:600;margin:10px 0 6px;border-top:1px dashed #cbd5e1;padding-top:8px">📋 识别结果（可修改，可空）</div>
+      <div class="row">
+        <div class="field"><label>日期</label><input type="date" id="gc_date"></div>
+        <div class="field"><label>对手</label><input type="text" id="gc_opponent" placeholder="如：香港北區"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>我方比分</label><input type="number" id="gc_scoreSelf" min="0" max="50"></div>
+        <div class="field"><label>对方比分</label><input type="number" id="gc_scoreOpp" min="0" max="50"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>投球数</label><input type="number" id="gc_pitchCount" min="0" max="300"></div>
+        <div class="field"><label>好球率 (%)</label><input type="number" id="gc_strike" min="0" max="100"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>投出三振</label><input type="number" id="gc_strikeout" min="0" max="30"></div>
+        <div class="field"><label>球速 (km/h)</label><input type="number" id="gc_speed" min="30" max="120"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>安打</label><input type="number" id="gc_hits" min="0" max="20"></div>
+        <div class="field"><label>打数</label><input type="number" id="gc_atBats" min="0" max="20"></div>
+        <div class="field"><label>被三振</label><input type="number" id="gc_struckOut" min="0" max="20"></div>
+      </div>
+      <button class="btn" id="importGc" style="font-size:13px;padding:11px;margin-top:4px">✓ 导入为比赛记录</button>
+    </div>
+  </div>
+</div>
+
 <div id="printReport"></div>
 
 <script>
 const KEY = 'baseball_growth_coach_v6';
 let LANG = localStorage.getItem('bgc_lang') || 'zh';
-// v9.2：版本标识 —— 用于「你在看的是不是最新版」判断 + 自动更新检测
-const APP_VER = 'v9.2';
-const APP_BUILD = '2026-09-12.2220';
+// v9.3：版本标识 —— 用于「你在看的是不是最新版」判断 + 自动更新检测
+const APP_VER = 'v9.3';
+const APP_BUILD = '2026-09-13.0740';
 let _lastVerCheck = 0;
 
 // 9宫格位置编号（0-24，5x5）
@@ -381,7 +430,7 @@ const STRIKE_ZONES = new Set([6,7,8,11,12,13,16,17,18]);
 function isStrike(idx) { return STRIKE_ZONES.has(idx); }
 
 const I18N = {
-  tab_home: { zh:'成长', en:'Home' }, tab_log: { zh:'日志', en:'Log' }, tab_chart: { zh:'曲线', en:'Charts' }, tab_review: { zh:'复盘', en:'Review' }, tab_me: { zh:'我', en:'Me' },
+  tab_home: { zh:'成长', en:'Home' }, tab_log: { zh:'日志', en:'Log' }, tab_chart: { zh:'曲线', en:'Charts' }, tab_ai: { zh:'AI教练', en:'AI Coach' }, tab_me: { zh:'我', en:'Me' },
   save: { zh:'保存记录', en:'Save Record' }, reset: { zh:'重置为示例数据', en:'Reset to Sample Data' }, yes: { zh:'确定', en:'OK' }, cancel: { zh:'取消', en:'Cancel' },
   empty: { zh:'还没有数据', en:'No data yet' }, years: { zh:'岁', en:'yr' },
   home_title: { zh:'成长中心', en:'Growth Hub' },
@@ -583,7 +632,7 @@ const I18N = {
   pr_dev: { zh:'设备数据接入（CSV）', en:'Device Data (CSV)' },
 
   // v6 新增
-  quick_pitch: { zh:'⚾ 投球快记（9 宫格）', en:'⚾ Quick Pitch (9-Zone)' },
+  quick_pitch: { zh:'⚾ 投球快计（9 宫格）', en:'⚾ Quick Pitch (9-Zone)' },
   quick_pitch_sub: { zh:'点格子 → 投一球。本会话内可撤销。', en:'Tap a zone → log one pitch. Undo within session.' },
   import_csv_btn: { zh:'📁 导入设备数据 (CSV)', en:'📁 Import Device CSV' },
   pitch_modal_title: { zh:'⚾ 投球快计', en:'⚾ Pitch Quick Log' },
@@ -622,6 +671,44 @@ const I18N = {
   warn_limit_10_12: { zh:'10-12 岁投手周上限', en:'Weekly limit (age 10-12)' },
   warn_limit_13_15: { zh:'13-15 岁投手周上限', en:'Weekly limit (age 13-15)' },
   warn_8u: { zh:'8 岁以下投手周上限', en:'Weekly limit (under 8)' },
+
+  // ===== v9.3 新增：AI教练页 / GC PDF 导入 / 内联复盘 / 体测数据 =====
+  ai_page_title: { zh:'AI 教练', en:'AI Coach' },
+  ai_page_sub: { zh:'视频动作分析 + 设备数据技术分析', en:'Video analysis + device data' },
+  ai_dev_title: { zh:'📁 设备数据（技术分析）', en:'📁 Device Data (CSV)' },
+  ai_dev_sub: { zh:'导入 Rapsodo / Blast Motion 的 CSV，本地解析不上传，用于球速、转速、棒速等技术分析。', en:'Import Rapsodo / Blast Motion CSV — parsed locally, never uploaded. Powers speed/spin/swing analysis.' },
+  ai_dev_none: { zh:'还没导入设备数据', en:'No device data yet' },
+  ai_dev_rows: { zh:'条设备数据', en:' device rows' },
+  ai_dev_chart_link: { zh:'去曲线页看设备曲线 →', en:'View device charts →' },
+  ai_need_key: { zh:'💡 AI 大模型未启用', en:'💡 LLM not enabled' },
+  ai_need_key_sub: { zh:'到「我」页面配置智谱 / DeepSeek API Key 后，AI 教练会用大模型做深度分析；不配置也能用本地分析。', en:'Configure an API key in the Me tab for cloud analysis. Local analysis works without it.' },
+  gc_import_btn: { zh:'📄 导入比赛数据（GC PDF）', en:'📄 Import GC PDF' },
+  gc_import_sub: { zh:'选 GameChanger 导出的比赛 PDF，本机自动识别关键数据（不上传）', en:'Pick a GameChanger match PDF — parsed on-device (never uploaded)' },
+  gc_modal_title: { zh:'导入比赛数据（GC PDF）', en:'Import GC PDF' },
+  gc_help: { zh:'选择 GameChanger 导出的比赛 PDF，本机本地解析（不上传任何数据），自动识别日期/比分/投球数等字段，识别不到的可手动补。也可直接粘贴 PDF 里的文字。', en:'Pick a GameChanger match PDF — parsed locally, never uploaded. Date/score/pitches are auto-detected; fill the rest manually. You can also paste PDF text.' },
+  gc_parse: { zh:'🔍 解析预览', en:'🔍 Parse Preview' },
+  gc_import: { zh:'✓ 导入为比赛记录', en:'✓ Import as Match' },
+  gc_imported: { zh:'已导入为比赛记录', en:'Imported as match record' },
+  gc_no_text: { zh:'先选择 PDF 或粘贴文字', en:'Pick a PDF or paste text first' },
+  gc_parsing: { zh:'正在解析 PDF…', en:'Parsing PDF…' },
+  gc_detected: { zh:'自动识别结果（可修改）', en:'Auto-detected (editable)' },
+  review_btn: { zh:'📝 写复盘', en:'📝 Add Review' },
+  review_edit_btn: { zh:'✏️ 编辑复盘', en:'✏️ Edit' },
+  review_save_btn: { zh:'✓ 保存复盘', en:'✓ Save Review' },
+  review_cancel: { zh:'取消', en:'Cancel' },
+  review_saved: { zh:'✓ 复盘已保存', en:'✓ Review saved' },
+  fit_title: { zh:'🏃 体测数据', en:'🏃 Fitness Tests' },
+  fit_sub: { zh:'每项都可留空；记录 2 条以上，后期自动生成成长曲线。', en:'All fields optional. Curves unlock after 2+ entries.' },
+  fit_first_run: { zh:'一垒跑 (秒)', en:'1st-base run (s)' },
+  fit_home_run: { zh:'全垒跑 (秒)', en:'Home-run run (s)' },
+  fit_speed: { zh:'球速 (km/h)', en:'Pitch speed (km/h)' },
+  fit_bat_speed: { zh:'棒速 (km/h)', en:'Bat speed (km/h)' },
+  fit_throw: { zh:'掷远 (米)', en:'Long throw (m)' },
+  fit_add: { zh:'新增一条体测', en:'Add a test entry' },
+  fit_hist: { zh:'体测历史', en:'Test history' },
+  fit_empty: { zh:'还没有体测数据', en:'No fitness data yet' },
+  fit_need_one: { zh:'至少填一项数据', en:'Fill at least one value' },
+  n_fit: { zh:'体测记录', en:'Fitness tests' },
 };
 function t(key, vars) {
   let s = (I18N[key] && I18N[key][LANG]) || key;
@@ -644,9 +731,35 @@ function applyI18n() {
   if (csvTitle) csvTitle.textContent = t('csv_modal_title');
   const helpEl = document.getElementById('csvHelp');
   if (helpEl) helpEl.textContent = t('csv_help');
+  // v9.3：投球快计弹层标签（修 v9.1 静态 HTML 里 ${...} 字面量 bug）+ GC 弹层
+  const pmDateLbl = document.getElementById('pmDateLbl');
+  if (pmDateLbl) pmDateLbl.textContent = t('pm_date');
+  const pmTodayBtn = document.getElementById('pmDateToday');
+  if (pmTodayBtn) pmTodayBtn.textContent = LANG==='zh' ? '📅 今天' : '📅 Today';
+  const pmSpeedLbl = document.getElementById('lblPitchSpeed');
+  if (pmSpeedLbl) pmSpeedLbl.textContent = t('speed');
+  const pmSpeedInput = document.getElementById('pm_speed');
+  if (pmSpeedInput) pmSpeedInput.placeholder = LANG==='zh' ? '如：80（可空）' : 'e.g. 80 (optional)';
+  const gcTitle = document.getElementById('gcModalTitle');
+  if (gcTitle) gcTitle.textContent = t('gc_modal_title');
+  const gcHelp = document.getElementById('gcHelp');
+  if (gcHelp) gcHelp.textContent = t('gc_help');
+  const gcParseBtn = document.getElementById('parseGc');
+  if (gcParseBtn) gcParseBtn.textContent = t('gc_parse');
+  const gcImportBtn = document.getElementById('importGc');
+  if (gcImportBtn) gcImportBtn.textContent = t('gc_import');
 }
 
 function loadData() {
+  // v9.3：复盘模块取消 — 旧 reflections 按日期+类型迁移到对应日志记录后面（只挂到还没复盘的记录）
+  const migrateReflections = (d) => {
+    (d.reflections || []).forEach(r => {
+      if (!r || !r.date) return;
+      const target = (d.logs || []).find(l => l.date === r.date && l.type === r.type && !l.review);
+      if (target) target.review = { keep: r.keep || '', improve: r.improve || '', highlight: r.highlight || '' };
+    });
+    return d;
+  };
   const raw = localStorage.getItem(KEY);
   if (raw) {
     const d = JSON.parse(raw);
@@ -656,13 +769,14 @@ function loadData() {
     d.pitches = d.pitches || [];   // 单球记录
     d.deviceLogs = d.deviceLogs || [];   // CSV 导入的设备数据
     d.supportNotes = d.supportNotes || [];   // v8.4：AI 历史鼓励话归档
-    return d;
+    d.fitnessLogs = d.fitnessLogs || [];   // v9.3：体测数据（一垒跑/全垒跑/球速/棒速/掷远）
+    return migrateReflections(d);
   }
   // v8.7：用户按过"从零开始"——重写为彻底清空状态，不再自动加载示例 seed
   if (localStorage.getItem('_bgc_wiped') === '1') {
     return {
       profile: { name:'', title:'训练生', birthdate:'', initialHeight:null, initialWeight:null },
-      logs: [], bodyLogs: [], pitches: [], reflections: [], deviceLogs: [], supportNotes: []
+      logs: [], bodyLogs: [], pitches: [], reflections: [], deviceLogs: [], supportNotes: [], fitnessLogs: []
     };
   }
   const seed = {
@@ -710,10 +824,11 @@ function loadData() {
       {date:'2026-09-04', source:'rapsodo', speed:82, spinRate:2295, break:-3.6, isStrike:false, rawSpeedMph:51.0},
       {date:'2026-09-04', source:'rapsodo', speed:83, spinRate:2310, break:-2.9, isStrike:true, rawSpeedMph:51.6},
       {date:'2026-09-04', source:'rapsodo', speed:81, spinRate:2248, break:-3.2, isStrike:true, rawSpeedMph:50.3},
-    ]
+    ],
+    fitnessLogs: []   // v9.3：体测数据
   };
   localStorage.setItem(KEY, JSON.stringify(seed));
-  return seed;
+  return migrateReflections(seed);
 }
 function saveData(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
 
@@ -744,7 +859,10 @@ loadLLMConfig();
 let currentTab = 'home';
 let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:null, strike:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'' };
 let bodyForm = { date: new Date().toISOString().slice(0,10), height:'', weight:'' };
-let reflectForm = { date: new Date().toISOString().slice(0,10), type:'train', keep:'', improve:'', highlight:'', source:'self' };
+// v9.3：复盘不再单独成模块 — reviewOpenId 记录当前展开复盘表单的日志 id
+let reviewOpenId = null;
+// v9.3：体测数据表单
+let fitForm = { date: new Date().toISOString().slice(0,10), firstRun:'', homeRun:'', speed:'', batSpeed:'', throwDist:'' };
 // 投球会话暂存
 let pitchSession = { entries: [], speed: 80 };
 // CSV 导入暂存
@@ -1033,6 +1151,154 @@ function importCsv() {
   render();
 }
 
+// v9.3：CSV 弹层事件改为全局一次性绑定（入口移到「AI教练」页后，不在 renderLog 里绑）
+function bindCsvModal() {
+  document.getElementById('parseCsv').onclick = () => {
+    const text = document.getElementById('csvText').value.trim();
+    if (!text) { toast(LANG==='zh'?'先粘贴或选择文件':'Paste or pick file first'); return; }
+    csvPreview = parseCsv(text);
+    const pv = document.getElementById('csvPreview');
+    pv.style.display = 'block';
+    pv.innerHTML = `<span class="ok">✓ ${LANG==='zh'?'识别格式：':'Format:'} ${csvPreview.format}</span>  <span class="ok">${LANG==='zh'?'共':'Total:'} ${csvPreview.total} ${LANG==='zh'?'条':'rows'}</span>
+      <pre style="margin-top:6px;color:#cbd5e1;font-size:10px">${csvPreview.preview.map((l,i)=>`${i+1}. ${l}`).join('\n')}</pre>
+      ${csvPreview.rows.length?'':`<span class="err">× ${LANG==='zh'?'无可识别行':'No valid rows'}</span>`}`;
+    if (csvPreview.rows.length) document.getElementById('importCsv').style.display = 'block';
+  };
+  document.getElementById('csvFile').onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = ev => { document.getElementById('csvText').value = ev.target.result; };
+    reader.readAsText(f);
+  };
+  document.getElementById('importCsv').onclick = importCsv;
+}
+
+// ============ v9.3：GC（GameChanger）比赛 PDF 导入 ============
+// 思路：pdf.js 按需从 CDN 加载（不拖慢启动），PDF 在本机解析出文字，
+// 用启发式正则识别日期/比分/投球数/三振/安打等字段，识别结果可人工修改后再导入。
+let _gcBound = false;
+function bindGcModal() {
+  if (_gcBound) return;
+  _gcBound = true;
+  document.getElementById('parseGc').onclick = () => {
+    const text = document.getElementById('gcText').value.trim();
+    if (!text) { toast(t('gc_no_text')); return; }
+    applyGcParse(parseGcText(text));
+  };
+  document.getElementById('gcFile').onchange = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    toast(t('gc_parsing'));
+    try {
+      const text = await extractPdfText(f);
+      document.getElementById('gcText').value = text;
+      applyGcParse(parseGcText(text));
+    } catch (err) {
+      toast('❌ ' + err.message);
+    }
+  };
+  document.getElementById('importGc').onclick = importGc;
+}
+function applyGcParse(parsed) {
+  // 填入可编辑表单 + 显示预览
+  const pv = document.getElementById('gcPreview');
+  pv.style.display = 'block';
+  const found = Object.entries(parsed).filter(([k,v]) => v !== '' && v != null);
+  pv.innerHTML = `<span class="ok">✓ ${t('gc_detected')}</span>
+    <pre style="margin-top:6px;color:#cbd5e1;font-size:10px">${found.length ? found.map(([k,v]) => `${k}: ${v}`).join('\n') : (LANG==='zh'?'未识别到字段，请手动填写':'No fields detected — fill manually')}</pre>`;
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v !== '' && v != null) el.value = v; };
+  set('gc_date', parsed.date); set('gc_opponent', parsed.opponent);
+  set('gc_scoreSelf', parsed.scoreSelf); set('gc_scoreOpp', parsed.scoreOpp);
+  set('gc_pitchCount', parsed.pitchCount); set('gc_strike', parsed.strike);
+  set('gc_strikeout', parsed.strikeout); set('gc_speed', parsed.speed);
+  set('gc_hits', parsed.hits); set('gc_atBats', parsed.atBats); set('gc_struckOut', parsed.struckOut);
+  document.getElementById('gcForm').style.display = 'block';
+}
+function openGcModal() {
+  ['gc_date','gc_opponent','gc_scoreSelf','gc_scoreOpp','gc_pitchCount','gc_strike','gc_strikeout','gc_speed','gc_hits','gc_atBats','gc_struckOut'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const d = document.getElementById('gc_date');
+  if (d) { const today = new Date().toISOString().slice(0,10); d.value = today; d.max = today; }
+  document.getElementById('gcText').value = '';
+  document.getElementById('gcFile').value = '';
+  document.getElementById('gcPreview').style.display = 'none';
+  document.getElementById('gcPreview').innerHTML = '';
+  document.getElementById('gcForm').style.display = 'none';
+  bindGcModal();
+  document.getElementById('gcModal').classList.add('show');
+}
+function ensurePdfJs() {
+  return new Promise((resolve, reject) => {
+    if (window.pdfjsLib) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve();
+    };
+    s.onerror = () => reject(new Error(LANG==='zh'?'pdf.js 加载失败（检查网络）':'pdf.js failed to load'));
+    document.head.appendChild(s);
+  });
+}
+async function extractPdfText(file) {
+  await ensurePdfJs();
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  let txt = '';
+  for (let i = 1; i <= Math.min(pdf.numPages, 8); i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    txt += content.items.map(it => it.str).join(' ') + '\n';
+  }
+  return txt;
+}
+function parseGcText(text) {
+  // 启发式识别 GC 记分 PDF 常见字段；识别不到留空，由用户手动补
+  const out = { date:'', opponent:'', scoreSelf:'', scoreOpp:'', pitchCount:'', strike:'', strikeout:'', speed:'', hits:'', atBats:'', struckOut:'' };
+  const num = (re) => { const m = text.match(re); return m ? m[1] : ''; };
+  let m = text.match(/(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) out.date = m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
+  else { m = text.match(/(\d{1,2})[\/.](\d{1,2})[\/.](20\d{2})/); if (m) out.date = m[3] + '-' + String(m[1]).padStart(2,'0') + '-' + String(m[2]).padStart(2,'0'); }
+  m = text.match(/vs\.?\s+([A-Za-z\u4e00-\u9fff][A-Za-z\u4e00-\u9fff \-]{1,24})/i);
+  if (m) out.opponent = m[1].trim();
+  m = text.match(/\b(\d{1,2})\s*[-–—]\s*(\d{1,2})\b/);
+  if (m) { out.scoreSelf = m[1]; out.scoreOpp = m[2]; }
+  out.pitchCount = num(/(?:pitches?|投球数?)[^\d]{0,8}(\d{1,3})/i) || num(/\b(\d{1,3})\s+pitches?\b/i);
+  out.strikeout = num(/(?:strikeouts?\s*thrown|投出三振|三振)[^\d]{0,8}(\d{1,2})/i) || num(/\bSO[:\s]+(\d{1,2})\b/);
+  out.strike = num(/(?:strike\s*rate|好球率)[^\d]{0,8}(\d{1,3})/i);
+  out.speed = num(/(?:top\s*speed|velocity|球速)[^\d]{0,8}(\d{2,3}(?:\.\d)?)/i);
+  out.hits = num(/\bhits?\b[^\d]{0,8}(\d{1,2})/i) || num(/\bH[:\s]+(\d{1,2})\b/);
+  out.atBats = num(/\bat\s*bats?\b[^\d]{0,8}(\d{1,2})/i) || num(/\bAB[:\s]+(\d{1,2})\b/);
+  out.struckOut = num(/\bstruck\s*out\b[^\d]{0,8}(\d{1,2})/i);
+  return out;
+}
+function importGc() {
+  const val = (id) => { const el = document.getElementById(id); const v = el ? el.value : ''; return (v === '' || v == null) ? null : (isNaN(+v) ? v : +v); };
+  const dateStr = (document.getElementById('gc_date').value) || new Date().toISOString().slice(0,10);
+  const entry = {
+    id: Date.now(),
+    date: dateStr,
+    type: 'match',
+    source: 'parent',
+    note: '📄 GC PDF 导入',
+    opponent: (document.getElementById('gc_opponent').value || '').trim(),
+  };
+  const map = { scoreSelf:'gc_scoreSelf', scoreOpp:'gc_scoreOpp', pitchCount:'gc_pitchCount', strike:'gc_strike', strikeout:'gc_strikeout', speed:'gc_speed', hits:'gc_hits', atBats:'gc_atBats', struckOut:'gc_struckOut' };
+  let any = false;
+  for (const k in map) { const v = val(map[k]); if (v !== null) { entry[k] = v; any = true; } }
+  if (!any && !entry.opponent) { toast(LANG==='zh'?'至少填一项数据':'Fill at least one value'); return; }
+  // 比分 → 自动推胜负
+  if (entry.scoreSelf != null && entry.scoreOpp != null) entry.result = entry.scoreSelf > entry.scoreOpp ? 'win' : (entry.scoreSelf < entry.scoreOpp ? 'loss' : 'draw');
+  DATA.logs.push(entry);
+  saveData(DATA);
+  closeModal('gcModal');
+  toast('✓ ' + t('gc_imported'));
+  render();
+}
+
 function useGPS() {
   if (!navigator.geolocation) { toast(t('loc_no')); return; }
   toast(LANG==='zh'?'定位中…':'Locating…');
@@ -1093,8 +1359,18 @@ function startVoice(field) {
     if (voiceField) {
       // 同步到表单数据
       if (voiceField === 'note') form.note = document.getElementById('f_note').value;
-      else reflectForm[voiceField] = document.getElementById('f_'+voiceField).value;
-      saveData(DATA);
+      else if (voiceField.indexOf('rv_') === 0) {
+        // v9.3：内联复盘字段 rv_<日志id>_<keep|improve|highlight>
+        const m = voiceField.match(/^rv_(\d+)_(keep|improve|highlight)$/);
+        if (m) {
+          const log = DATA.logs.find(x => String(x.id) === m[1]);
+          if (log) {
+            log.review = log.review || {};
+            log.review[m[2]] = document.getElementById('f_' + voiceField).value;
+            saveData(DATA);
+          }
+        }
+      }
       toast(t('mic_done') + (LANG==='zh'?'，请人工核对一下':' (please review)'));
     }
     voiceField = null;
@@ -1117,7 +1393,7 @@ function render() {
   if (currentTab==='home') renderHome(s);
   else if (currentTab==='log') renderLog(s);
   else if (currentTab==='chart') renderChart(s);
-  else if (currentTab==='review') renderReview(s);
+  else if (currentTab==='ai') renderAIPage(s);   // v9.3：AI教练独立 tab（原复盘 tab 取消）
   else if (currentTab==='me') renderMe(s);
   document.querySelectorAll('.tab').forEach(t=>{ t.classList.toggle('active', t.dataset.tab===currentTab); });
   applyI18n();
@@ -1199,12 +1475,18 @@ function renderLog(s) {
     <div class="h-screen">${t('log_title')}</div>
     <div class="sub-screen">${t('log_sub')}</div>
 
-    <!-- v6 新增：投球快记 + CSV 导入快捷入口 -->
+    <!-- v9.3：快捷入口按类型切换 — 训练=投球快计；比赛=GC PDF 导入（CSV 导入移到「AI教练」页） -->
+    ${form.type==='train' ? `
     <div class="row">
       <button class="btn" onclick="openPitchModal()" style="background:linear-gradient(135deg,#dc2626,#ef4444);font-size:13px;padding:12px">${t('quick_pitch')}</button>
-      <button class="btn warn" onclick="openCsvModal()" style="font-size:13px;padding:12px">${t('import_csv_btn')}</button>
     </div>
     <div style="font-size:11px;color:#7a8aa1;margin:-6px 0 12px;text-align:center">${t('quick_pitch_sub')}</div>
+    ` : `
+    <div class="row">
+      <button class="btn warn" onclick="openGcModal()" style="font-size:13px;padding:12px">${t('gc_import_btn')}</button>
+    </div>
+    <div style="font-size:11px;color:#7a8aa1;margin:-6px 0 12px;text-align:center">${t('gc_import_sub')}</div>
+    `}
 
     <div class="card">
       <h3>${t('add_new')}</h3>
@@ -1281,47 +1563,66 @@ function renderLog(s) {
   document.getElementById('seedBtn').onclick = () => {
     if (confirm(t('yes')+'?')) { localStorage.removeItem('_bgc_wiped'); localStorage.removeItem(KEY); DATA = loadData(); toast('✓ '+(LANG==='zh'?'已重置':'Reset')); render(); }
   };
-  // CSV 弹层的事件
-  document.getElementById('parseCsv').onclick = () => {
-    const text = document.getElementById('csvText').value.trim();
-    if (!text) { toast(LANG==='zh'?'先粘贴或选择文件':'Paste or pick file first'); return; }
-    csvPreview = parseCsv(text);
-    const pv = document.getElementById('csvPreview');
-    pv.style.display = 'block';
-    pv.innerHTML = `<span class="ok">✓ ${LANG==='zh'?'识别格式：':'Format:'} ${csvPreview.format}</span>  <span class="ok">${LANG==='zh'?'共':'Total:'} ${csvPreview.total} ${LANG==='zh'?'条':'rows'}</span>
-      <pre style="margin-top:6px;color:#cbd5e1;font-size:10px">${csvPreview.preview.map((l,i)=>`${i+1}. ${l}`).join('\n')}</pre>
-      ${csvPreview.rows.length?'':`<span class="err">× ${LANG==='zh'?'无可识别行':'No valid rows'}</span>`}`;
-    if (csvPreview.rows.length) document.getElementById('importCsv').style.display = 'block';
-  };
-  document.getElementById('csvFile').onchange = (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onload = ev => { document.getElementById('csvText').value = ev.target.result; };
-    reader.readAsText(f);
-  };
-  document.getElementById('importCsv').onclick = importCsv;
 }
+
+// v9.3：内联复盘表单（keep / improve / highlight 三问，字段命名 rv_<日志id>_<key> 兼容语音录入）
+function reviewFormHTML(l) {
+  const rv = l.review || {};
+  const q = (key, label) => `
+    <div class="reflect-q" style="margin-bottom:8px">
+      <div class="q-label" style="display:flex;align-items:center;gap:6px">${t('q_'+key)}
+        <button class="btn mic mini" id="mic_rv_${l.id}_${key}" style="margin-left:auto" onclick="startVoice('rv_${l.id}_${key}')">${t('mic_idle')}</button>
+      </div>
+      <textarea id="f_rv_${l.id}_${key}" style="font-size:12px" placeholder="${LANG==='zh'?'说或写都可以':'Speak or type'}">${rv[key] || ''}</textarea>
+    </div>`;
+  return `
+    <div style="margin-top:8px;background:#fefce8;border:1px solid #fde68a;border-radius:12px;padding:10px">
+      ${q('keep','keep')}${q('improve','improve')}${q('highlight','highlight')}
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="rvSave_${l.id}" style="flex:1;font-size:12px;padding:10px;background:linear-gradient(135deg,#92400e,#f59e0b)">${t('review_save_btn')}</button>
+        <button class="btn ghost" data-rv-cancel="${l.id}" style="font-size:12px;padding:10px">${t('review_cancel')}</button>
+      </div>
+    </div>`;
+}
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function renderLogList() {
   if (!DATA.logs.length) return `<div class="empty">${t('empty')}</div>`;
   return [...DATA.logs].reverse().map(l => {
     const bat = calcBatting(l.hits, l.atBats);
+    const rv = l.review;
+    const open = String(reviewOpenId) === String(l.id);
+    // v9.3：复盘跟在每条记录后面（不再单独开模块）
+    const rvBlock = `
+      <div style="margin-top:6px;border-top:1px dashed #e2e8f0;padding-top:6px">
+        ${rv ? `
+          <div style="font-size:11px;line-height:1.7;color:#1f2937">
+            ${rv.keep?`<div><b>✅</b> ${esc(rv.keep).replace(/\n/g,'<br>')}</div>`:''}
+            ${rv.improve?`<div><b>⚠️</b> ${esc(rv.improve).replace(/\n/g,'<br>')}</div>`:''}
+            ${rv.highlight?`<div><b>⭐</b> ${esc(rv.highlight).replace(/\n/g,'<br>')}</div>`:''}
+          </div>
+          <button class="btn ghost" data-rv-edit="${l.id}" style="font-size:11px;padding:6px 10px;margin-top:6px">${t('review_edit_btn')}</button>
+        ` : `
+          <button class="btn ghost" data-rv-add="${l.id}" style="font-size:11px;padding:6px 10px">${t('review_btn')}</button>
+        `}
+        ${open ? reviewFormHTML(l) : ''}
+      </div>`;
     return `
-    <div class="log-item">
+    <div class="log-item" style="flex-wrap:wrap">
       <div class="log-date">${l.date.slice(5)}<br><span style="color:#94a3b8">${l.type==='match'?t('match'):t('train')}</span></div>
-      <div class="log-info">
+      <div class="log-info" style="flex:1;min-width:60%">
         <div class="top" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          ${l.note||'(no note)'}
+          ${esc(l.note)||'(no note)'}
           <span class="src-pill ${l.source||'self'}">${srcLabel(l.source||'self')}</span>
           ${l.type==='match' && l.result?`<span class="badge ${l.result}">${resultLabel(l.result)}</span>`:''}
         </div>
-        <div class="bot">${LANG==='zh'?'投':'Threw '} ${l.pitchCount||0} · ${l.strike||0}% · K ${l.strikeout||0} · ${t('legend_bat')} ${bat!=null?fmtBat(bat):'-'} · SO ${l.struckOut||0} · ${'⭐'.repeat(l.mood)}</div>
-        ${l.type==='match' && (l.opponent||l.scoreSelf||l.scoreOpp)?`<div style="font-size:11px;color:#1f3a5f;margin-top:2px;font-weight:600">vs ${l.opponent||'?'} <b>${l.scoreSelf}-${l.scoreOpp}</b></div>`:''}
-        ${l.venue?`<div class="loc-pill" style="margin-top:3px">🏟 ${l.venue}</div>`:''}
+        <div class="bot">${LANG==='zh'?'投':'Threw '} ${l.pitchCount||0} · ${l.strike||0}% · K ${l.strikeout||0} · ${t('legend_bat')} ${bat!=null?fmtBat(bat):'-'} · SO ${l.struckOut||0} · ${'⭐'.repeat(l.mood||0)}</div>
+        ${l.type==='match' && (l.opponent||l.scoreSelf||l.scoreOpp)?`<div style="font-size:11px;color:#1f3a5f;margin-top:2px;font-weight:600">vs ${esc(l.opponent)||'?'} <b>${l.scoreSelf}-${l.scoreOpp}</b></div>`:''}
+        ${l.venue?`<div class="loc-pill" style="margin-top:3px">🏟 ${esc(l.venue)}</div>`:''}
       </div>
       <div class="log-speed">${l.speed ?? (LANG==='zh'?'—':'—')}</div>
       <div class="delete-x" data-del="${l.id}">×</div>
+      <div style="flex-basis:100%">${rvBlock}</div>
     </div>
   `}).join('');
 }
@@ -1370,6 +1671,32 @@ function bindFormEvents() {
   document.querySelectorAll('[data-del]').forEach(el=>{
     el.onclick = () => { if (confirm(t('yes')+'?')) { DATA.logs = DATA.logs.filter(l => l.id != el.dataset.del); saveData(DATA); render(); } };
   });
+  // ===== v9.3：内联复盘（写复盘 / 编辑 / 取消 / 保存） =====
+  document.querySelectorAll('[data-rv-add]').forEach(el=>{
+    el.onclick = () => { reviewOpenId = el.dataset.rvAdd; render(); };
+  });
+  document.querySelectorAll('[data-rv-edit]').forEach(el=>{
+    el.onclick = () => { reviewOpenId = el.dataset.rvEdit; render(); };
+  });
+  document.querySelectorAll('[data-rv-cancel]').forEach(el=>{
+    el.onclick = () => { reviewOpenId = null; render(); };
+  });
+  if (reviewOpenId != null) {
+    const saveBtn = document.getElementById('rvSave_' + reviewOpenId);
+    if (saveBtn) saveBtn.onclick = () => {
+      const log = DATA.logs.find(x => String(x.id) === String(reviewOpenId));
+      if (log) {
+        const g = (k) => (document.getElementById('f_rv_' + reviewOpenId + '_' + k) || {}).value || '';
+        const keep = g('keep').trim(), improve = g('improve').trim(), highlight = g('highlight').trim();
+        if (!keep && !improve && !highlight) delete log.review;
+        else log.review = { keep, improve, highlight };
+        saveData(DATA);
+      }
+      reviewOpenId = null;
+      toast(t('review_saved'));
+      render();
+    };
+  }
 }
 
 function renderChart(s) {
@@ -1552,163 +1879,17 @@ function renderBodyChart() {
   return g;
 }
 
-// ========== 反思模块 ==========
-function reflectKeywordSummary() {
-  const recent = DATA.reflections.slice(-10);
-  if (recent.length < 3) return null;
-  const stopWords = new Set(['的','了','是','我','你','他','要','在','和','与','也','有','会','能','到','要','去','做','对','比','上','下','中','还','就','把','被','让','但','又','或','一','二','三']);
-  function tokenize(text) {
-    if (!text) return [];
-    const words = [];
-    const cn = text.match(/[\u4e00-\u9fa5]+/g) || [];
-    cn.forEach(seg => {
-      for (let i=0; i<seg.length-1; i++) {
-        const w = seg.slice(i, i+2);
-        if (!stopWords.has(w)) words.push(w);
-      }
-    });
-    const en = text.match(/[a-zA-Z]+/g) || [];
-    en.forEach(w => { if (w.length>2) words.push(w.toLowerCase()); });
-    return words;
-  }
-  const buckets = { keep: {}, improve: {}, highlight: {} };
-  recent.forEach(r => {
-    ['keep','improve','highlight'].forEach(k => {
-      tokenize(r[k]).forEach(w => {
-        buckets[k][w] = (buckets[k][w] || 0) + 1;
-      });
-    });
-  });
-  function topN(obj, n=5) {
-    return Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n).filter(e=>e[1]>=2);
-  }
-  return {
-    keep: topN(buckets.keep),
-    improve: topN(buckets.improve),
-    highlight: topN(buckets.highlight)
-  };
-}
+// ========== v9.3：反思（复盘）不再单独成模块 — 挂在每条日志记录后面（见 renderLogList / reviewFormHTML） ==========
 
-function saveReflection() {
-  if (!reflectForm.keep && !reflectForm.improve && !reflectForm.highlight) {
-    toast(LANG==='zh'?'三问至少填一题':'Fill at least one');
-    return;
-  }
-  DATA.reflections.push({id: Date.now(), ...reflectForm});
-  saveData(DATA);
-  reflectForm = { date: new Date().toISOString().slice(0,10), type:'train', keep:'', improve:'', highlight:'', source:'self' };
-  toast('✓ '+(LANG==='zh'?'反思已保存':'Saved')); render();
-}
-
-function deleteReflection(id) {
-  if (!confirm(t('yes')+'?')) return;
-  DATA.reflections = DATA.reflections.filter(r => r.id != id);
-  saveData(DATA); render();
-}
-
-function renderReview(s) {
-  const recent = DATA.logs.slice(-5);
-  const avgSp = recent.length ? Math.round(recent.reduce((s,l)=>s+l.speed,0)/recent.length) : 0;
-  const avgMo = recent.length ? (recent.reduce((s,l)=>s+l.mood,0)/recent.length).toFixed(1) : 0;
-  const allBats = recent.map(l=>calcBatting(l.hits,l.atBats)).filter(b=>b!=null);
-  const avgBat = allBats.length ? (allBats.reduce((s,b)=>s+b,0)/allBats.length) : null;
-  const totalP = recent.reduce((s,l)=>s+(l.pitchCount||0),0);
-  const totalSO = recent.reduce((s,l)=>s+(l.strikeout||0),0);
-  const tags = [];
-  if (avgSp >= 80) tags.push(LANG==='zh'?'⚡ 球速破 80':'⚡ Speed 80+');
-  if (avgSp >= 82) tags.push(LANG==='zh'?'🔥 82+ 区间':'🔥 82+ zone');
-  if (avgMo >= 4) tags.push(LANG==='zh'?'💪 信心稳定':'💪 Steady');
-  if (avgBat!=null && avgBat >= 0.4) tags.push(LANG==='zh'?'🥇 打击 4 成':'🥇 Batting .400');
-  if (totalSO >= 3) tags.push(LANG==='zh'?'⚡ '+totalSO+' 三振':'⚡ '+totalSO+' K');
-  if (DATA.reflections.length >= 3) tags.push(LANG==='zh'?'📝 反思 '+DATA.reflections.length+' 次':'📝 '+DATA.reflections.length+' reflections');
-
-  const reviewQuote = t('review_q', {s: avgSp, b: avgBat!=null?fmtBat(avgBat):'—', c: Math.round(avgMo)});
-  const reflectList = [...DATA.reflections].sort((a,b)=>b.date.localeCompare(a.date));
-  const reflectKw = reflectKeywordSummary();
-
+// ============ v9.3：AI教练独立页面（原「复盘」tab 取消，复盘挂到每条记录后面） ============
+// 内容：① AI 视频分析教练（原复盘页入口移来） ② 设备数据 CSV 导入（原日志页入口移来）
+function renderAIPage(s) {
+  const ZH = LANG === 'zh';
+  const devN = (DATA.deviceLogs || []).length;
+  const devRecent = (DATA.deviceLogs || []).slice(-5).reverse();
   s.innerHTML = `
-    ${warningCardHTML()}
-    <div class="h-screen">${t('rev_title')}</div>
-    <div class="sub-screen">${t('rev_sub')}</div>
-
-    <div class="card" style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-color:#fcd34d">
-      <h3 style="color:#92400e">${t('reflect_title')}</h3>
-      <div class="sub-screen" style="margin-bottom:10px;color:#a16207">${t('reflect_sub')}</div>
-      <div class="row" style="margin-bottom:8px">
-        <div class="field"><label>${t('date')}</label><input type="date" id="rf_date" value="${reflectForm.date}"></div>
-      </div>
-      <div class="seg" id="rf_type" style="margin-bottom:8px">
-        <div class="seg-item ${reflectForm.type==='train'?'on':''}" data-v="train">${t('reflect_train')}</div>
-        <div class="seg-item ${reflectForm.type==='match'?'on':''}" data-v="match">${t('reflect_match')}</div>
-      </div>
-      <div class="reflect-q">
-        <div class="q-label">${t('q_keep')}<button class="btn mic mini" id="mic_keep" style="margin-left:auto" onclick="startVoice('keep')">${t('mic_idle')}</button></div>
-        <textarea id="f_keep" placeholder="${LANG==='zh'?'说或写：今天要继续保持的习惯/动作是什么？':'Speak: what to keep doing?'}">${reflectForm.keep}</textarea>
-      </div>
-      <div class="reflect-q">
-        <div class="q-label">${t('q_improve')}<button class="btn mic mini" id="mic_improve" style="margin-left:auto" onclick="startVoice('improve')">${t('mic_idle')}</button></div>
-        <textarea id="f_improve" placeholder="${LANG==='zh'?'说或写：下次要立刻改掉的是什么？':'Speak: what to fix next time?'}">${reflectForm.improve}</textarea>
-      </div>
-      <div class="reflect-q">
-        <div class="q-label">${t('q_highlight')}<button class="btn mic mini" id="mic_highlight" style="margin-left:auto" onclick="startVoice('highlight')">${t('mic_idle')}</button></div>
-        <textarea id="f_highlight" placeholder="${LANG==='zh'?'说或写：今天最值得记住的一刻？':'Speak: today\'s biggest moment?'}">${reflectForm.highlight}</textarea>
-      </div>
-      <button class="btn" id="saveRf" style="background:linear-gradient(135deg,#92400e,#f59e0b)">${t('reflect_save')}</button>
-    </div>
-
-    <div class="card">
-      <h3>📊 ${LANG==='zh'?'数据快照':'Snapshot'}</h3>
-      <div style="font-size:12px;line-height:1.9;color:#1f3a5f">
-        ${t('rev_avg',{n:recent.length,s:avgSp,m:avgMo})}${avgBat!=null?t('rev_avg_bat',{b:fmtBat(avgBat)}):''}<br>
-        ${t('rev_pitch',{n:totalP})}<br>
-        ${t('rev_so',{n:totalSO})}<br>
-        ${tags.length?t('rev_tags')+tags.join(' · '):t('rev_keep')}
-      </div>
-    </div>
-
-    ${reflectKw ? `<div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
-      <h3 style="color:#1e40af">${t('reflect_kw')}</h3>
-      <div style="margin-top:8px">
-        <div style="font-size:11px;color:#065f46;font-weight:600;margin-bottom:4px">✅ ${t('q_keep').replace('✅ ','')} Top</div>
-        <div class="kw-cloud" style="margin-bottom:10px">${reflectKw.keep.length?reflectKw.keep.map(([w,c])=>`<span class="kw keep">${w}<span class="c">×${c}</span></span>`).join(''):'<span style="font-size:11px;color:#94a3b8">—</span>'}</div>
-        <div style="font-size:11px;color:#991b1b;font-weight:600;margin-bottom:4px">⚠️ ${t('q_improve').replace('⚠️ ','')} Top</div>
-        <div class="kw-cloud" style="margin-bottom:10px">${reflectKw.improve.length?reflectKw.improve.map(([w,c])=>`<span class="kw improve">${w}<span class="c">×${c}</span></span>`).join(''):'<span style="font-size:11px;color:#94a3b8">—</span>'}</div>
-        <div style="font-size:11px;color:#1e40af;font-weight:600;margin-bottom:4px">⭐ ${t('q_highlight').replace('⭐ ','')} Top</div>
-        <div class="kw-cloud">${reflectKw.highlight.length?reflectKw.highlight.map(([w,c])=>`<span class="kw highlight">${w}<span class="c">×${c}</span></span>`).join(''):'<span style="font-size:11px;color:#94a3b8">—</span>'}</div>
-      </div>
-    </div>` : `<div class="card"><div class="empty">${t('reflect_kw_empty')}</div></div>`}
-
-    <div class="card">
-      <h3>${t('reflect_recent')} (${reflectList.length})</h3>
-      ${reflectList.length ? reflectList.slice(0,8).map(r => `
-        <div class="reflect-item">
-          <div class="ri-head">
-            <span>${r.date} · <b>${r.type==='match'?t('match'):t('train')}</b> · <span class="src-pill ${r.source||'self'}">${srcLabel(r.source||'self')}</span></span>
-            <span class="delete-x" data-del-rf="${r.id}">×</span>
-          </div>
-          ${r.keep?`<div class="ri-row"><b>✅</b> ${r.keep}</div>`:''}
-          ${r.improve?`<div class="ri-row"><b>⚠️</b> ${r.improve}</div>`:''}
-          ${r.highlight?`<div class="ri-row"><b>⭐</b> ${r.highlight}</div>`:''}
-        </div>
-      `).join('') : `<div class="empty">${t('reflect_empty')}</div>`}
-    </div>
-
-    <div class="review-card">
-      <h3>${t('rev_weekly')}</h3>
-      <div class="review-quote">${reviewQuote}</div>
-    </div>
-
-    <div class="card">
-      <h3>${t('rev_tomorrow')}</h3>
-      <p style="font-size:13px;line-height:1.7;color:#1f3a5f">
-        ${avgSp < 80 ? t('t1') : ''}
-        ${avgSp >= 80 && avgSp < 82 ? t('t2') : ''}
-        ${avgSp >= 82 ? t('t3') : ''}
-        ${avgBat!=null && avgBat < 0.3 ? '<br>'+t('t4') : ''}
-        ${avgBat!=null && avgBat >= 0.3 && avgBat < 0.5 ? '<br>'+t('t5') : ''}
-        <br>${t('t6')}
-      </p>
-    </div>
+    <div class="h-screen">${t('ai_page_title')}</div>
+    <div class="sub-screen">${t('ai_page_sub')}</div>
 
     <div class="card" style="background:linear-gradient(135deg,#312e81,#7c3aed);border-color:#a78bfa;color:white">
       <h3 style="color:white">${t('ai_entry_title')}</h3>
@@ -1717,55 +1898,28 @@ function renderReview(s) {
     </div>
 
     <div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
-      <h3>${t('export_section')}</h3>
-      <p style="font-size:12px;color:#475569;margin-bottom:10px">${t('export_sub')}</p>
-      <button class="btn" id="expBtn" style="font-size:12px;padding:10px;margin-bottom:8px">${t('exp_csv')}</button>
-      <button class="btn warn" id="pdfBtn" style="font-size:12px;padding:10px;margin-bottom:8px">${t('exp_pdf')}</button>
-      <button class="btn ghost" id="jsonBtn" style="font-size:12px;padding:10px">${t('exp_json')}</button>
+      <h3 style="color:#1e40af">${t('ai_dev_title')}</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:10px;line-height:1.6">${t('ai_dev_sub')}</p>
+      <button class="btn warn" onclick="openCsvModal()" style="font-size:13px;padding:12px">${t('import_csv_btn')}</button>
+      ${devN ? `
+      <div style="margin-top:12px;font-size:11px;color:#1f3a5f">
+        <b>${devN}</b>${t('ai_dev_rows')} · <a href="javascript:go('chart')" style="color:#0369a1;font-weight:600">${t('ai_dev_chart_link')}</a>
+      </div>
+      <div style="margin-top:6px">
+        ${devRecent.map(d=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:11px">
+          <span>${d.date} · <b>${d.source}</b></span>
+          <span style="color:#1f3a5f">${d.speed?d.speed+' km/h':''}${d.spinRate?' · '+d.spinRate+' rpm':''}${d.swingSpeed?' · '+(ZH?'棒速':'swing')+' '+d.swingSpeed:''}</span>
+        </div>`).join('')}
+      </div>` : `<div class="empty" style="padding:10px">${t('ai_dev_none')}</div>`}
     </div>
+
+    ${(!LLM.enabled || !LLM.apiKey) ? `
+    <div class="card" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-color:#fcd34d">
+      <h3 style="color:#92400e">${t('ai_need_key')}</h3>
+      <p style="font-size:12px;color:#92400e;line-height:1.6">${t('ai_need_key_sub')}</p>
+    </div>` : ''}
   `;
-
-  document.getElementById('rf_date').onchange = e => reflectForm.date = e.target.value;
-  document.getElementById('f_keep').oninput = e => reflectForm.keep = e.target.value;
-  document.getElementById('f_improve').oninput = e => reflectForm.improve = e.target.value;
-  document.getElementById('f_highlight').oninput = e => reflectForm.highlight = e.target.value;
-  document.querySelectorAll('#rf_type .seg-item').forEach(el=>{ el.onclick = () => { reflectForm.type = el.dataset.v; render(); }; });
-  document.getElementById('saveRf').onclick = saveReflection;
-  document.querySelectorAll('[data-del-rf]').forEach(el=>{
-    el.onclick = () => deleteReflection(el.dataset.delRf);
-  });
-
-  // 导出按钮（含 v6 设备数据）
-  document.getElementById('expBtn').onclick = () => {
-    let csv = 'date,type,source,opponent,scoreSelf,scoreOpp,result,venue,speed,pitchCount,strike_rate,strikeout,hits,atBats,struckOut,mood,note\n';
-    csv += DATA.logs.map(l=>`${l.date},${l.type},${l.source||'self'},${l.opponent||''},${l.scoreSelf||0},${l.scoreOpp||0},${l.result||''},${l.venue||''},${l.speed},${l.pitchCount||0},${l.strike},${l.strikeout||0},${l.hits||0},${l.atBats||0},${l.struckOut||0},${l.mood},"${(l.note||'').replace(/"/g,'""')}"`).join('\n');
-    csv += '\n\n# 反思\ndate,type,source,keep,improve,highlight\n';
-    csv += DATA.reflections.map(r=>`${r.date},${r.type},${r.source||'self'},"${(r.keep||'').replace(/"/g,'""')}","${(r.improve||'').replace(/"/g,'""')}","${(r.highlight||'').replace(/"/g,'""')}"`).join('\n');
-    if ((DATA.pitches||[]).length) {
-      csv += '\n\n# 单球记录\ndate,speed_kmh,is_strike,zone_index,source\n';
-      csv += DATA.pitches.map(p=>`${p.date},${p.speed},${p.isStrike?1:0},${p.location+1},${p.source||'self'}`).join('\n');
-    }
-    if ((DATA.deviceLogs||[]).length) {
-      csv += '\n\n# 设备数据 (Rapsodo / Blast Motion)\ndate,source,speed_kmh,spin_rpm,break_in,is_strike\n';
-      csv += DATA.deviceLogs.map(d=>`${d.date},${d.source},${d.speed||''},${d.spinRate||''},${d.break!=null?d.break:''},${d.isStrike!=null?(d.isStrike?1:0):''}`).join('\n');
-    }
-    const blob = new Blob([csv], {type:'text/csv'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `ellie_baseball_log_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    toast('✓ CSV '+(LANG==='zh'?'已下载':'downloaded'));
-  };
-  document.getElementById('pdfBtn').onclick = exportPDF;
   bindAIStartBtn();
-  document.getElementById('jsonBtn').onclick = () => {
-    const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `ellie_baseball_backup_${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    toast('✓ JSON '+(LANG==='zh'?'已下载':'downloaded'));
-  };
 }
 
 function buildPrintHTML() {
@@ -1796,14 +1950,15 @@ function buildPrintHTML() {
 
   const reviewQuote = t('review_q', {s: avgSp, b: avgBat!=null?fmtBat(avgBat):'—', c: Math.round(avgMoVal)});
 
-  const reflectRecent = [...DATA.reflections].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
-  const reflectHTML = reflectRecent.length ? `
+  // v9.3：复盘挂在日志记录后面（打印最近 5 条有复盘的记录）
+  const rvLogs = [...DATA.logs].sort((a,b)=>b.date.localeCompare(a.date)).filter(l=>l.review).slice(0,5);
+  const reflectHTML = rvLogs.length ? `
     <h2>${t('pr_reflect')}</h2>
-    ${reflectRecent.map(r => `<div class="box" style="margin-bottom:8px">
+    ${rvLogs.map(r => `<div class="box" style="margin-bottom:8px">
       <div style="font-size:11px;color:#64748b;margin-bottom:4px"><b>${r.date}</b> · ${r.type==='match'?t('match'):t('train')} · ${srcLabel(r.source||'self')}</div>
-      ${r.keep?`<div style="font-size:11px;line-height:1.6;margin-bottom:3px"><b>✅</b> ${r.keep}</div>`:''}
-      ${r.improve?`<div style="font-size:11px;line-height:1.6;margin-bottom:3px"><b>⚠️</b> ${r.improve}</div>`:''}
-      ${r.highlight?`<div style="font-size:11px;line-height:1.6"><b>⭐</b> ${r.highlight}</div>`:''}
+      ${r.review.keep?`<div style="font-size:11px;line-height:1.6;margin-bottom:3px"><b>✅</b> ${r.review.keep}</div>`:''}
+      ${r.review.improve?`<div style="font-size:11px;line-height:1.6;margin-bottom:3px"><b>⚠️</b> ${r.review.improve}</div>`:''}
+      ${r.review.highlight?`<div style="font-size:11px;line-height:1.6"><b>⭐</b> ${r.review.highlight}</div>`:''}
     </div>`).join('')}
   ` : '';
 
@@ -1939,6 +2094,9 @@ function renderMe(s) {
   const age = calcAge(DATA.profile.birthdate);
   const body = latestBody();
   const bmi = body ? calcBMI(body.height, body.weight) : null;
+  // v9.3：体测数据
+  const fitList = [...(DATA.fitnessLogs||[])].sort((a,b)=>b.date.localeCompare(a.date));
+  const fitLatest = fitList[0] || null;
   s.innerHTML = `
     <div class="h-screen">${t('me_title')}</div>
     <div class="sub-screen">${t('me_sub')}</div>
@@ -1971,6 +2129,43 @@ function renderMe(s) {
             <span>${r.date}</span>
             <span style="color:#1f3a5f">${r.height} cm · ${r.weight} kg · BMI ${calcBMI(r.height,r.weight)||'—'}</span>
             <span class="delete-x" data-del-body="${r.id}" style="cursor:pointer">×</span>
+          </div>
+        `).join('')}
+      </div>`:''}
+    </div>
+    <!-- v9.3：体测数据卡（一垒跑 / 全垒跑 / 球速 / 棒速 / 掷远，全部可空） -->
+    <div class="card" style="background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border-color:#6ee7b7">
+      <h3 style="color:#065f46">${t('fit_title')}</h3>
+      <div style="font-size:11px;color:#047857;margin-bottom:10px;line-height:1.6">${t('fit_sub')}</div>
+      ${fitLatest ? `<div class="stat-row" style="margin-bottom:10px">
+        ${fitLatest.firstRun?`<div class="stat body"><div class="v">${fitLatest.firstRun}</div><div class="l">${t('fit_first_run')}</div></div>`:''}
+        ${fitLatest.homeRun?`<div class="stat body"><div class="v">${fitLatest.homeRun}</div><div class="l">${t('fit_home_run')}</div></div>`:''}
+        ${fitLatest.speed?`<div class="stat body"><div class="v">${fitLatest.speed}</div><div class="l">${t('fit_speed')}</div></div>`:''}
+        ${fitLatest.batSpeed?`<div class="stat body"><div class="v">${fitLatest.batSpeed}</div><div class="l">${t('fit_bat_speed')}</div></div>`:''}
+        ${fitLatest.throwDist?`<div class="stat body"><div class="v">${fitLatest.throwDist}</div><div class="l">${t('fit_throw')}</div></div>`:''}
+      </div>` : `<div class="empty" style="padding:12px">${t('fit_empty')}</div>`}
+      <div class="section-title">${t('fit_add')}</div>
+      <div class="row">
+        <div class="field"><label>${t('date')}</label><input type="date" id="ft_date" value="${fitForm.date}" max="${new Date().toISOString().slice(0,10)}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>${t('fit_first_run')}</label><input type="number" id="ft_firstRun" min="0" max="30" step="0.01" value="${fitForm.firstRun}" placeholder="${LANG==='zh'?'如：4.2（可空）':'e.g. 4.2'}"></div>
+        <div class="field"><label>${t('fit_home_run')}</label><input type="number" id="ft_homeRun" min="0" max="60" step="0.01" value="${fitForm.homeRun}" placeholder="${LANG==='zh'?'如：17.5（可空）':'e.g. 17.5'}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>${t('fit_speed')}</label><input type="number" id="ft_speed" min="30" max="120" value="${fitForm.speed}" placeholder="${LANG==='zh'?'如：82（可空）':'e.g. 82'}"></div>
+        <div class="field"><label>${t('fit_bat_speed')}</label><input type="number" id="ft_batSpeed" min="20" max="150" value="${fitForm.batSpeed}" placeholder="${LANG==='zh'?'如：96（可空）':'e.g. 96'}"></div>
+        <div class="field"><label>${t('fit_throw')}</label><input type="number" id="ft_throwDist" min="0" max="120" value="${fitForm.throwDist}" placeholder="${LANG==='zh'?'如：45（可空）':'e.g. 45'}"></div>
+      </div>
+      <button class="btn" id="saveFit" style="background:linear-gradient(135deg,#059669,#10b981)">${t('save')}</button>
+      ${fitList.length?`<div style="margin-top:12px"><div style="font-size:11px;color:#7a8aa1;margin-bottom:6px">${t('fit_hist')}</div>
+        ${fitList.slice(0,8).map(r=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12px">
+            <span style="min-width:72px">${r.date}</span>
+            <span style="flex:1;color:#1f3a5f;font-size:11px;text-align:right">
+              ${r.firstRun?(LANG==='zh'?'一垒 ':'1B ')+r.firstRun+'s · ':''}${r.homeRun?(LANG==='zh'?'全垒 ':'HR ')+r.homeRun+'s · ':''}${r.speed?(LANG==='zh'?'球速 ':'SPD ')+r.speed+' · ':''}${r.batSpeed?(LANG==='zh'?'棒速 ':'BAT ')+r.batSpeed+' · ':''}${r.throwDist?(LANG==='zh'?'掷远 ':'THR ')+r.throwDist+'m':''}
+            </span>
+            <span class="delete-x" data-del-fit="${r.id}" style="cursor:pointer">×</span>
           </div>
         `).join('')}
       </div>`:''}
@@ -2034,9 +2229,18 @@ function renderMe(s) {
         ${t('n_pitch')}：<b>${(DATA.pitches||[]).length}</b> ${LANG==='zh'?'球':' pitches'}<br>
         ${t('n_dev')}：<b>${(DATA.deviceLogs||[]).length}</b> ${LANG==='zh'?'条':' rows'}<br>
         ${t('n_body')}：<b>${DATA.bodyLogs.length}</b> ${LANG==='zh'?'条':' entries'}<br>
+        ${t('n_fit')}：<b>${(DATA.fitnessLogs||[]).length}</b> ${LANG==='zh'?'条':' entries'}<br>
         ${t('earliest')}：<b>${DATA.logs[0]?.date||'—'}</b><br>
         ${t('streak')}：<b>${DATA.logs.length?Math.ceil((Date.now()-new Date(DATA.logs[0].date))/86400000):0}</b> ${LANG==='zh'?'天':'days'}
       </div>
+    </div>
+    <!-- v9.3：数据导出（原「复盘」页移过来） -->
+    <div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
+      <h3 style="color:#1e40af">${t('export_section')}</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:10px">${t('export_sub')}</p>
+      <button class="btn" id="expBtn" style="font-size:12px;padding:10px;margin-bottom:8px">${t('exp_csv')}</button>
+      <button class="btn warn" id="pdfBtn" style="font-size:12px;padding:10px;margin-bottom:8px">${t('exp_pdf')}</button>
+      <button class="btn ghost" id="jsonBtn" style="font-size:12px;padding:10px">${t('exp_json')}</button>
     </div>
     <div class="card" id="wipeCard" style="background:linear-gradient(135deg,#fef2f2,#fff1f2);border-color:#fca5a5">
       <h3 style="color:#7f1d1d">${LANG==='zh'?'🧪 测试 & 重置':'🧪 Test & Reset'}</h3>
@@ -2077,6 +2281,62 @@ function renderMe(s) {
   document.querySelectorAll('[data-del-body]').forEach(el=>{
     el.onclick = () => { if (confirm(t('yes')+'?')) { DATA.bodyLogs = DATA.bodyLogs.filter(r => r.id != el.dataset.delBody); saveData(DATA); render(); } };
   });
+  // ===== v9.3：体测数据 =====
+  document.getElementById('ft_date').onchange = e => fitForm.date = e.target.value;
+  ['firstRun','homeRun','speed','batSpeed','throwDist'].forEach(k => {
+    const el = document.getElementById('ft_' + k);
+    if (el) el.oninput = e => fitForm[k] = e.target.value;
+  });
+  document.getElementById('saveFit').onclick = () => {
+    const entry = { id: Date.now(), date: fitForm.date || new Date().toISOString().slice(0,10) };
+    ['firstRun','homeRun','speed','batSpeed','throwDist'].forEach(k => {
+      const v = fitForm[k];
+      if (v !== '' && v != null && !isNaN(+v)) entry[k] = +v;
+    });
+    const hasAny = ['firstRun','homeRun','speed','batSpeed','throwDist'].some(k => entry[k] != null);
+    if (!hasAny) { toast(t('fit_need_one')); return; }
+    DATA.fitnessLogs.push(entry);
+    saveData(DATA);
+    fitForm = { date: new Date().toISOString().slice(0,10), firstRun:'', homeRun:'', speed:'', batSpeed:'', throwDist:'' };
+    toast('✓ ' + (LANG==='zh'?'已保存':'Saved')); render();
+  };
+  document.querySelectorAll('[data-del-fit]').forEach(el=>{
+    el.onclick = () => { if (confirm(t('yes')+'?')) { DATA.fitnessLogs = DATA.fitnessLogs.filter(r => r.id != el.dataset.delFit); saveData(DATA); render(); } };
+  });
+  // ===== v9.3：导出按钮（原复盘页移来，含 v6 设备数据） =====
+  document.getElementById('expBtn').onclick = () => {
+    let csv = 'date,type,source,opponent,scoreSelf,scoreOpp,result,venue,speed,pitchCount,strike_rate,strikeout,hits,atBats,struckOut,mood,note\n';
+    csv += DATA.logs.map(l=>`${l.date},${l.type},${l.source||'self'},${l.opponent||''},${l.scoreSelf||0},${l.scoreOpp||0},${l.result||''},${l.venue||''},${l.speed},${l.pitchCount||0},${l.strike},${l.strikeout||0},${l.hits||0},${l.atBats||0},${l.struckOut||0},${l.mood},"${(l.note||'').replace(/"/g,'""')}"`).join('\n');
+    csv += '\n\n# 复盘\ndate,type,source,keep,improve,highlight\n';
+    csv += DATA.logs.filter(l=>l.review).map(l=>`${l.date},${l.type},${l.source||'self'},"${(l.review.keep||'').replace(/"/g,'""')}","${(l.review.improve||'').replace(/"/g,'""')}","${(l.review.highlight||'').replace(/"/g,'""')}"`).join('\n');
+    if ((DATA.pitches||[]).length) {
+      csv += '\n\n# 单球记录\ndate,speed_kmh,is_strike,zone_index,source\n';
+      csv += DATA.pitches.map(p=>`${p.date},${p.speed},${p.isStrike?1:0},${p.location+1},${p.source||'self'}`).join('\n');
+    }
+    if ((DATA.deviceLogs||[]).length) {
+      csv += '\n\n# 设备数据 (Rapsodo / Blast Motion)\ndate,source,speed_kmh,spin_rpm,break_in,is_strike\n';
+      csv += DATA.deviceLogs.map(d=>`${d.date},${d.source},${d.speed||''},${d.spinRate||''},${d.break!=null?d.break:''},${d.isStrike!=null?(d.isStrike?1:0):''}`).join('\n');
+    }
+    if ((DATA.fitnessLogs||[]).length) {
+      csv += '\n\n# 体测数据\ndate,first_base_run_s,home_run_s,pitch_speed,bat_speed,long_throw_m\n';
+      csv += DATA.fitnessLogs.map(f=>`${f.date},${f.firstRun||''},${f.homeRun||''},${f.speed||''},${f.batSpeed||''},${f.throwDist||''}`).join('\n');
+    }
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ellie_baseball_log_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    toast('✓ CSV '+(LANG==='zh'?'已下载':'downloaded'));
+  };
+  document.getElementById('pdfBtn').onclick = exportPDF;
+  document.getElementById('jsonBtn').onclick = () => {
+    const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ellie_baseball_backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    toast('✓ JSON '+(LANG==='zh'?'已下载':'downloaded'));
+  };
   // v8.7：「🧹 从零开始」一键彻底清空（保留 LLM Key），「🌱 重载示例」可恢复 demo seed
   const wipeBtn = document.getElementById('wipeBtn');
   if (wipeBtn) wipeBtn.onclick = () => {
@@ -2214,6 +2474,8 @@ function checkForUpdate(manual) {
 setInterval(()=>{ document.getElementById('clk').textContent = new Date().toTimeString().slice(0,5); }, 1000);
 if (LANG === 'en') { document.getElementById('langZh').classList.remove('on'); document.getElementById('langEn').classList.add('on'); document.documentElement.lang = 'en'; }
 render();
+bindCsvModal();   // v9.3：CSV 弹层全局绑定（入口在「AI教练」页）
+bindGcModal();    // v9.3：GC PDF 弹层全局绑定（入口在日志页·比赛类型）
 checkForUpdate();   // v9.2：后台静默比对 version.txt，有新版顶部弹条
 (function(){ const dv = document.getElementById('deskVer'); if (dv) dv.textContent = APP_VER + ' · ' + APP_BUILD; })();
 // ===== v7 AI Coach 视频分析模块 =====
@@ -3395,15 +3657,19 @@ function bindResult() {
     if (ev.trend_note) lines.push(`📈 ${ZH?'趋势':'Trend'}: ${ev.trend_note}`);
     if (ev.load_note) lines.push(`⚖️ ${ZH?'负荷':'Load'}: ${ev.load_note}`);
     const sceneTag = AI.context === 'match' ? (ZH?'🏆比赛':'🏆Match') : (ZH?'🏋️训练':'🏋️Training');
-    const r = {
-      date: dateStr,
-      type: 'train',
-      source: AI.feedbackSource==='cloud' ? 'self' : 'self',
-      keep: `${sceneTag} · ` + lines.join(' / '),
-      improve: ev.problem.msg + (ev.pose_tips ? `\n🎯 ${ZH?'动作要点':'Pose'}: ${ev.pose_tips.join(' | ')}` : ''),
-      highlight: ev.encourage
-    };
-    DATA.reflections.unshift(r);
+    const keepBlock = `${sceneTag} · ` + lines.join(' / ');
+    const improveBlock = ev.problem.msg + (ev.pose_tips ? `\n🎯 ${ZH?'动作要点':'Pose'}: ${ev.pose_tips.join(' | ')}` : '') + `\n💡 ${ZH?'综合':'Synthesis'}: ${ev.tips.join(' | ')}`;
+    const highlightBlock = ev.encourage;
+    // v9.3：复盘不再单独存模块 — 挂到当天对应类型日志记录的后面（没有就自动建一条）
+    let target = DATA.logs.find(l => l.date === dateStr && (AI.context==='match' ? l.type==='match' : l.type==='train'));
+    if (!target) {
+      target = { id: Date.now(), date: dateStr, type: AI.context==='match' ? 'match' : 'train', source: 'self', mood: 4, note: ZH ? '🤖 AI 视频分析' : 'AI video analysis' };
+      DATA.logs.push(target);
+    }
+    target.review = target.review || {};
+    target.review.keep = target.review.keep ? target.review.keep + '\n' + keepBlock : keepBlock;
+    target.review.improve = target.review.improve ? target.review.improve + '\n' + improveBlock : improveBlock;
+    target.review.highlight = target.review.highlight ? target.review.highlight + '\n' + highlightBlock : highlightBlock;
     // v8.4：把鼓励话单独归档到 supportNotes（面试时可翻历史）
     if (ev.encourage && ev.encourage.trim().length>0) {
       DATA.supportNotes.unshift({
@@ -3417,14 +3683,12 @@ function bindResult() {
       if (DATA.supportNotes.length > 30) DATA.supportNotes.length = 30;
     }
     saveData(DATA);
-    DATA.reflections[0].improve += `\n💡 ${ZH?'综合':'Synthesis'}: ${ev.tips.join(' | ')}`;
-    saveData(DATA);
-    toast('✓ ' + (ZH?'已保存（含历史鼓励话归档）':'Saved + encouragement archived'));
+    toast('✓ ' + (ZH?'复盘已保存到当天记录（含鼓励话归档）':'Review saved to today\'s record'));
     closeAICoach();
   };
 }
 
-// 在 renderReview 里绑 entry 按钮
+// v9.3：AI 视频分析入口按钮绑定（在「AI教练」页）
 window.bindAIStartBtn = function() {
   const b = document.getElementById('aiStartBtn');
   if (b) b.onclick = openAICoach;
