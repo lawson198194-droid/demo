@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Baseball Growth Coach · 莀安 Demo v8.6 (录像≤30秒+后摄像头)</title>
+<title>Baseball Growth Coach · 莀安 Demo v8.7 (清空按钮+无示例种子)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -409,6 +409,10 @@ const I18N = {
   t6: { zh:'· 投完一组 20 球，记下信心和球速，看双曲线变化', en:'· After 20 pitches, log speed + conf., watch the dual curve' },
   t7: { zh:'· 本周投球过多，休息一天再练 — 投手伤肩不是小事', en:'· Heavy week — rest one day. Pitcher\'s elbow is real.' },
   me_title: { zh:'我', en:'Me' }, me_sub: { zh:'个人信息 · 身体数据 · 设置', en:'Profile · Body · Settings' },
+  wipe_all_btn: { zh:'🧹 从零开始（清空全部测试用）', en:'🧹 Wipe to Zero (test reset)' },
+  wipe_all_confirm: { zh:'确认清空所有训练/比赛/身体/反思数据？\\n\\nLLM Key 会保留。', en:'Wipe all train/match/body/reflection data?\\n\\nLLM Key will be kept.' },
+  wipe_all_done: { zh:'✓ 已清空（LLM Key 已保留）', en:'✓ Wiped clean (LLM Key kept)' },
+  wipe_all_status: { zh:'状态：已从零开始（无示例数据）', en:'Status: wiped clean (no demo seed)' },
   me_profile: { zh:'👤 个人信息', en:'👤 Profile' }, name: { zh:'姓名', en:'Name' }, title: { zh:'身份', en:'Title' },
   birth: { zh:'生日', en:'Birthday' }, fill_birth: { zh:'填生日后自动算年龄', en:'Add birthday to auto-calc age' },
   me_body: { zh:'📐 身体数据', en:'📐 Body Data' }, add_body: { zh:'记录一次', en:'Log Once' },
@@ -581,6 +585,13 @@ function loadData() {
     d.deviceLogs = d.deviceLogs || [];   // CSV 导入的设备数据
     d.supportNotes = d.supportNotes || [];   // v8.4：AI 历史鼓励话归档
     return d;
+  }
+  // v8.7：用户按过"从零开始"——重写为彻底清空状态，不再自动加载示例 seed
+  if (localStorage.getItem('_bgc_wiped') === '1') {
+    return {
+      profile: { name:'', title:'训练生', birthdate:'', initialHeight:null, initialWeight:null },
+      logs: [], bodyLogs: [], pitches: [], reflections: [], deviceLogs: [], supportNotes: []
+    };
   }
   const seed = {
     profile: { name:'Ellie', title:'Hong Kong U12 Pitcher', birthdate:'2014-11-15', initialHeight:null, initialWeight:null },
@@ -1152,7 +1163,7 @@ function renderLog(s) {
   document.getElementById('saveBtn').onclick = saveLog;
   document.getElementById('gpsBtn').onclick = useGPS;
   document.getElementById('seedBtn').onclick = () => {
-    if (confirm(t('yes')+'?')) { localStorage.removeItem(KEY); DATA = loadData(); toast('✓ '+(LANG==='zh'?'已重置':'Reset')); render(); }
+    if (confirm(t('yes')+'?')) { localStorage.removeItem('_bgc_wiped'); localStorage.removeItem(KEY); DATA = loadData(); toast('✓ '+(LANG==='zh'?'已重置':'Reset')); render(); }
   };
   // CSV 弹层的事件
   document.getElementById('parseCsv').onclick = () => {
@@ -1911,6 +1922,14 @@ function renderMe(s) {
         ${t('streak')}：<b>${DATA.logs.length?Math.ceil((Date.now()-new Date(DATA.logs[0].date))/86400000):0}</b> ${LANG==='zh'?'天':'days'}
       </div>
     </div>
+    <div class="card" id="wipeCard" style="background:linear-gradient(135deg,#fef2f2,#fff1f2);border-color:#fca5a5">
+      <h3 style="color:#7f1d1d">${LANG==='zh'?'🧪 测试 & 重置':'🧪 Test & Reset'}</h3>
+      <div style="font-size:12px;color:#7f1d1d;margin-bottom:8px">${t('wipe_all_status')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn ghost" id="wipeBtn" style="font-size:12px;padding:9px;background:linear-gradient(135deg,#fee2e2,#fecaca);border-color:#f87171;color:#7f1d1d;font-weight:700">${t('wipe_all_btn')}</button>
+        <button class="btn ghost" id="seedReloadBtn" style="font-size:12px;padding:9px">🌱 ${LANG==='zh'?'重载示例':'Reload Seed'}</button>
+      </div>
+    </div>
   `;
   document.getElementById('p_name').onchange = e => { DATA.profile.name = e.target.value; saveData(DATA); toast('✓ '+(LANG==='zh'?'已保存':'Saved')); };
   document.getElementById('p_title').onchange = e => { DATA.profile.title = e.target.value; saveData(DATA); toast('✓ '+(LANG==='zh'?'已保存':'Saved')); };
@@ -1929,6 +1948,24 @@ function renderMe(s) {
   document.querySelectorAll('[data-del-body]').forEach(el=>{
     el.onclick = () => { if (confirm(t('yes')+'?')) { DATA.bodyLogs = DATA.bodyLogs.filter(r => r.id != el.dataset.delBody); saveData(DATA); render(); } };
   });
+  // v8.7：「🧹 从零开始」一键彻底清空（保留 LLM Key），「🌱 重载示例」可恢复 demo seed
+  const wipeBtn = document.getElementById('wipeBtn');
+  if (wipeBtn) wipeBtn.onclick = () => {
+    if (!confirm(t('wipe_all_confirm'))) return;
+    localStorage.setItem('_bgc_wiped', '1');   // 标记：未来首启动不再加载示例 seed
+    localStorage.removeItem(KEY);              // 删当前数据（LLM Key / 语言设置在另一个 key，不动）
+    toast(t('wipe_all_done'));
+    location.reload();
+  };
+  const seedReloadBtn = document.getElementById('seedReloadBtn');
+  if (seedReloadBtn) seedReloadBtn.onclick = () => {
+    if (!confirm(t('yes')+'?')) return;
+    localStorage.removeItem('_bgc_wiped');     // 取消 wipe 标记，让下次首启动看到示例
+    localStorage.removeItem(KEY);
+    DATA = loadData();
+    toast('✓ '+(LANG==='zh'?'已重载示例':'Seed reloaded'));
+    render();
+  };
   bindLLMSettings();
 }
 
