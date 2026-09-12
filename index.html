@@ -278,7 +278,12 @@
     </div>
     <div class="field">
       <label id="lblPitchSpeed">球速 (km/h)</label>
-      <input type="number" id="pm_speed" min="50" max="120" value="80">
+      <input type="number" id="pm_speed" min="50" max="120" placeholder="${LANG==='zh'?'如：80（可空）':'e.g. 80 (optional)'}">
+    </div>
+    <div style="font-size:11px;color:#475569;font-weight:600;margin:8px 0 4px;border-top:1px dashed #cbd5e1;padding-top:8px" id="pmSummaryTitle">📋 本场汇总（可留空）</div>
+    <div class="row" style="gap:8px">
+      <div class="field" style="flex:1"><label id="pmLblHitsAllowed">被安打数</label><input type="number" id="pm_pitcherHits" min="0" max="50" placeholder="如：3（可空）"></div>
+      <div class="field" style="flex:1"><label id="pmLblSO">投出三振数</label><input type="number" id="pm_pitcherSO" min="0" max="50" placeholder="如：5（可空）"></div>
     </div>
     <div class="pitch-grid-caption">
       <span id="lblCatcherView">捕手视角（投球目标）</span>
@@ -513,12 +518,18 @@ const I18N = {
   quick_pitch: { zh:'⚾ 投球快记（9 宫格）', en:'⚾ Quick Pitch (9-Zone)' },
   quick_pitch_sub: { zh:'点格子 → 投一球。本会话内可撤销。', en:'Tap a zone → log one pitch. Undo within session.' },
   import_csv_btn: { zh:'📁 导入设备数据 (CSV)', en:'📁 Import Device CSV' },
-  pitch_modal_title: { zh:'⚾ 投一次球', en:'⚾ Log One Pitch' },
+  pitch_modal_title: { zh:'⚾ 投球快计', en:'⚾ Pitch Quick Log' },
   lbl_total: { zh:'已投', en:'Thrown' }, lbl_strike: { zh:'好球', en:'Strike' }, lbl_ball: { zh:'坏球', en:'Ball' }, lbl_strike_pct: { zh:'好球率', en:'Strike %' },
   lbl_catcher_view: { zh:'捕手视角（投球目标）', en:"Catcher's view (target zone)" },
   lbl_strike_zone: { zh:'好球区（中间 9 格）', en:'Strike zone (middle 9)' },
   lbl_ball_zone: { zh:'坏球区（外圈 16 格）', en:'Ball zone (outer 16)' },
-  lbl_undo: { zh:'撤销', en:'Undo' }, lbl_save_session: { zh:'保存会话', en:'Save Session' },
+  lbl_undo: { zh:'撤销', en:'Undo' }, lbl_save_session: { zh:'✓ 保存为训练记录', en:'✓ Save as Training' },
+  pm_pitch_summary: { zh:'📋 本场汇总（可留空）', en:'📋 Session summary (optional)' },
+  pm_pitcher_hits: { zh:'被安打数', en:'Hits Allowed' },
+  pm_pitcher_strikeout: { zh:'投出三振数', en:'Strikeouts Thrown' },
+  pm_pitcher_hits_ph: { zh:'如：3（可空）', en:'e.g. 3 (optional)' },
+  pm_pitcher_strikeout_ph: { zh:'如：5（可空）', en:'e.g. 5 (optional)' },
+  pm_saved_train: { zh:'✓ 已记录为训练', en:'✓ Saved as training' },
   csv_modal_title: { zh:'设备数据导入', en:'Device CSV Import' },
   csv_help: { zh:'选择 Rapsodo 或 Blast Motion 导出的 CSV，本机本地解析（不上传）。也可粘贴 CSV 直接测试。', en:'Pick Rapsodo or Blast Motion CSV — parsed locally. You can also paste CSV.' },
   lbl_choose_file: { zh:'选择文件', en:'Choose file' },
@@ -648,7 +659,7 @@ function saveLLMConfig() {
 let DATA = loadData();
 loadLLMConfig();
 let currentTab = 'home';
-let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:80, strike:70, mood:4, pitchCount:80, strikeout:0, hits:0, atBats:0, struckOut:0, note:'', location:null, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:'' };
+let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:null, strike:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'' };
 let bodyForm = { date: new Date().toISOString().slice(0,10), height:'', weight:'' };
 let reflectForm = { date: new Date().toISOString().slice(0,10), type:'train', keep:'', improve:'', highlight:'', source:'self' };
 // 投球会话暂存
@@ -696,11 +707,14 @@ function getWeekStart(dateStr) {
   return d.toISOString().slice(0,10);
 }
 function pitchesThisWeek() {
-  if (!DATA.pitches || !DATA.pitches.length) return 0;
+  // v8.5：总投球数 = 一周内训练/比赛日志中的 pitchCount 加总（不论来源：手动记 / 投球快计自动 / CSV 都算）
+  if (!DATA.logs || !DATA.logs.length) return 0;
   const now = new Date();
   const today = now.toISOString().slice(0,10);
   const monday = getWeekStart(today);
-  return DATA.pitches.filter(p => p.date >= monday && p.date <= today).length;
+  return DATA.logs
+    .filter(l => l.date >= monday && l.date <= today)
+    .reduce((sum, l) => sum + (l.pitchCount || 0), 0);
 }
 function warningCardHTML() {
   const age = calcAge(DATA.profile.birthdate);
@@ -724,9 +738,11 @@ function warningCardHTML() {
 
 // ============ v6 9宫格 session ============
 function openPitchModal() {
-  pitchSession = { entries: [], speed: 80 };
+  pitchSession = { entries: [], speed: null };
   renderPitchGrid();
-  document.getElementById('pm_speed').value = 80;
+  document.getElementById('pm_speed').value = '';
+  document.getElementById('pm_pitcherHits').value = '';
+  document.getElementById('pm_pitcherSO').value = '';
   updateSessionStats();
   document.getElementById('pitchModal').classList.add('show');
 }
@@ -773,10 +789,34 @@ function undoPitch() {
 function savePitchSession() {
   if (!pitchSession.entries.length) { toast(LANG==='zh'?'没有投球可保存':'No pitches to save'); return; }
   const today = new Date().toISOString().slice(0,10);
+  // 1) 写单球 → DATA.pitches[]（驱动 9 宫格热点图 + AI 战术分析）
   const newRows = pitchSession.entries.map(e => ({ date: today, speed: e.speed, location: e.location, isStrike: e.isStrike, source:'self' }));
   DATA.pitches.push(...newRows);
+  // 2) 同步建一条训练日志 → DATA.logs[]（驱动总投球数 + 训练趋势）
+  const n = newRows.length;
+  const s = newRows.filter(r => r.isStrike).length;
+  const pct = n ? Math.round(s / n * 100) : 0;
+  const avgSpeed = Math.round(newRows.reduce((a, r) => a + r.speed, 0) / n);
+  const hitsAllowed = document.getElementById('pm_pitcherHits').value;
+  const soThrown = document.getElementById('pm_pitcherSO').value;
+  const logEntry = {
+    id: Date.now(),
+    date: today,
+    type: 'train',
+    source: 'self',
+    pitchCount: n,
+    strike: pct,
+    speed: avgSpeed,
+    mood: 4,
+    note: '⚾ 投球快计自动记录'
+  };
+  // 可空字段：有填才写入
+  if (hitsAllowed !== '') logEntry.hits = +hitsAllowed;        // 投手被安打数（与莀安本人安打共用 hits 字段）
+  if (soThrown !== '') logEntry.pitcherSO = +soThrown;          // 投手投出三振（独立字段，避免与日志 strikeout 混淆）
+  if (hitsAllowed !== '' || soThrown !== '') logEntry.note += ` · 被安打 ${hitsAllowed || 0} · 投出三振 ${soThrown || 0}`;
+  DATA.logs.push(logEntry);
   saveData(DATA);
-  toast(`✓ ${LANG==='zh'?'已保存':'Saved'} ${newRows.length} ${LANG==='zh'?'球':'pitches'}`);
+  toast(`✓ ${LANG==='zh'?'已记录为训练':'Saved as training'} · ${n} ${LANG==='zh'?'球':'p'}`);
   closeModal('pitchModal');
   render();
 }
@@ -1059,8 +1099,8 @@ function renderLog(s) {
         <div class="section-title">${t('match_section')}</div>
         <div class="field"><label>${t('opponent')}</label><input type="text" id="f_opponent" value="${form.opponent}" placeholder="${LANG==='zh'?'如：台北聯隊':'e.g. Taipei Tigers'}"></div>
         <div class="row">
-          <div class="field"><label>${LANG==='zh'?'我方':'Self'}</label><input type="number" id="f_scoreSelf" min="0" max="50" value="${form.scoreSelf}"></div>
-          <div class="field"><label>${LANG==='zh'?'对方':'Opp'}</label><input type="number" id="f_scoreOpp" min="0" max="50" value="${form.scoreOpp}"></div>
+          <div class="field"><label>${LANG==='zh'?'我方':'Self'}</label><input type="number" id="f_scoreSelf" min="0" max="50" value="${form.scoreSelf ?? ''}" placeholder="${LANG==='zh'?'如：6（可空）':'e.g. 6 (optional)'}"></div>
+          <div class="field"><label>${LANG==='zh'?'对方':'Opp'}</label><input type="number" id="f_scoreOpp" min="0" max="50" value="${form.scoreOpp ?? ''}" placeholder="${LANG==='zh'?'如：4（可空）':'e.g. 4 (optional)'}"></div>
         </div>
         <div class="field"><label>${t('result')}</label>
           <div class="seg" id="f_result">
@@ -1077,20 +1117,20 @@ function renderLog(s) {
         ${locDisplay}
       </div>
       <div class="section-title">${t('pitch_section')}</div>
-      <div class="row">
-        <div class="field"><label>${t('speed')}</label><input type="number" id="f_speed" min="50" max="120" value="${form.speed}"></div>
-        <div class="field"><label>${t('pitch_count')}</label><input type="number" id="f_pitchCount" min="0" max="500" value="${form.pitchCount}"></div>
-      </div>
-      <div class="row">
-        <div class="field"><label>${t('strike_rate')}</label><input type="number" id="f_strike" min="0" max="100" value="${form.strike}"></div>
-        <div class="field"><label>${t('strikeout')}</label><input type="number" id="f_strikeout" min="0" max="50" value="${form.strikeout}"></div>
-      </div>
-      <div class="section-title">${t('bat_section')}</div>
-      <div class="row">
-        <div class="field"><label>${t('hits')}</label><input type="number" id="f_hits" min="0" max="20" value="${form.hits}"></div>
-        <div class="field"><label>${t('at_bats')}</label><input type="number" id="f_atBats" min="0" max="20" value="${form.atBats}"></div>
-        <div class="field"><label>${t('struck_out')}</label><input type="number" id="f_struckOut" min="0" max="20" value="${form.struckOut}"></div>
-      </div>
+<div class="row">
+          <div class="field"><label>${t('speed')}</label><input type="number" id="f_speed" min="50" max="120" value="${form.speed ?? ''}" placeholder="${LANG==='zh'?'如：80（可空）':'e.g. 80 (optional)'}"></div>
+          <div class="field"><label>${t('pitch_count')}</label><input type="number" id="f_pitchCount" min="0" max="500" value="${form.pitchCount ?? ''}" placeholder="${LANG==='zh'?'如：60（可空）':'e.g. 60 (optional)'}"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>${t('strike_rate')}</label><input type="number" id="f_strike" min="0" max="100" value="${form.strike ?? ''}" placeholder="${LANG==='zh'?'如：70（可空）':'e.g. 70 (optional)'}"></div>
+          <div class="field"><label>${t('strikeout')}</label><input type="number" id="f_strikeout" min="0" max="50" value="${form.strikeout ?? ''}" placeholder="${LANG==='zh'?'如：5（可空）':'e.g. 5 (optional)'}"></div>
+        </div>
+        <div class="section-title">${t('bat_section')}</div>
+        <div class="row">
+          <div class="field"><label>${t('hits')}</label><input type="number" id="f_hits" min="0" max="20" value="${form.hits ?? ''}" placeholder="${LANG==='zh'?'如：2（可空）':'e.g. 2 (optional)'}"></div>
+          <div class="field"><label>${t('at_bats')}</label><input type="number" id="f_atBats" min="0" max="20" value="${form.atBats ?? ''}" placeholder="${LANG==='zh'?'如：4（可空）':'e.g. 4 (optional)'}"></div>
+          <div class="field"><label>${t('struck_out')}</label><input type="number" id="f_struckOut" min="0" max="20" value="${form.struckOut ?? ''}" placeholder="${LANG==='zh'?'如：1（可空）':'e.g. 1 (optional)'}"></div>
+        </div>
       <div class="field"><label>${t('mood')}</label>
         <div class="seg" id="f_mood">
           ${[1,2,3,4,5].map(n=>`<div class="seg-item ${form.mood===n?'on':''}" data-v="${n}">${'⭐'.repeat(n)}</div>`).join('')}
@@ -1153,7 +1193,7 @@ function renderLogList() {
         ${l.type==='match' && (l.opponent||l.scoreSelf||l.scoreOpp)?`<div style="font-size:11px;color:#1f3a5f;margin-top:2px;font-weight:600">vs ${l.opponent||'?'} <b>${l.scoreSelf}-${l.scoreOpp}</b></div>`:''}
         ${l.venue?`<div class="loc-pill" style="margin-top:3px">🏟 ${l.venue}</div>`:''}
       </div>
-      <div class="log-speed">${l.speed}</div>
+      <div class="log-speed">${l.speed ?? (LANG==='zh'?'—':'—')}</div>
       <div class="delete-x" data-del="${l.id}">×</div>
     </div>
   `}).join('');
@@ -1161,26 +1201,39 @@ function renderLogList() {
 
 function saveLog() {
   if (!form.date) { toast(t('date')); return; }
-  DATA.logs.push({id:Date.now(), ...form});
+  // v8.5：去掉空字段的默认值 0，让数据为真"可空"保存进 DATA.logs
+  const cleaned = { id: Date.now() };
+  ['date','type','source','note','location','opponent','result','venue'].forEach(k => cleaned[k] = form[k]);
+  ['speed','strike','mood','pitchCount','strikeout','hits','atBats','struckOut','scoreSelf','scoreOpp','pitcherSO','pitcherHits'].forEach(k => {
+    if (form[k] !== null && form[k] !== '' && !Number.isNaN(form[k])) cleaned[k] = form[k];
+  });
+  DATA.logs.push(cleaned);
   saveData(DATA);
-  form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:form.speed, strike:form.strike, mood:4, pitchCount:form.pitchCount, strikeout:0, hits:0, atBats:0, struckOut:0, note:'', location:null, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:'' };
-  toast('✓ '+(LANG==='zh'?'已保存':'Saved')); render();
+  form = { date: new Date().toISOString().slice(0,10), type: form.type, source: form.source, speed:null, strike:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'' };
+  toast('✓ '+(LANG==='zh'?'已记录为训练/比赛':'Saved as train/match')); render();
 }
 
 function bindFormEvents() {
   document.getElementById('f_date').onchange = e => form.date = e.target.value;
-  document.getElementById('f_speed').onchange = e => form.speed = +e.target.value;
-  document.getElementById('f_strike').onchange = e => form.strike = +e.target.value;
-  document.getElementById('f_pitchCount').onchange = e => form.pitchCount = +e.target.value;
-  document.getElementById('f_strikeout').onchange = e => form.strikeout = +e.target.value;
-  document.getElementById('f_hits').onchange = e => form.hits = +e.target.value;
-  document.getElementById('f_atBats').onchange = e => form.atBats = +e.target.value;
-  document.getElementById('f_struckOut').onchange = e => form.struckOut = +e.target.value;
+  // v8.5：空值留空，写入 null（不强制 0）
+  const numericField = (id, key) => {
+    document.getElementById(id).onchange = e => {
+      const v = e.target.value;
+      form[key] = (v === '' || v === null) ? null : (Number.isNaN(+v) ? null : +v);
+    };
+  };
+  numericField('f_speed', 'speed');
+  numericField('f_strike', 'strike');
+  numericField('f_pitchCount', 'pitchCount');
+  numericField('f_strikeout', 'strikeout');
+  numericField('f_hits', 'hits');
+  numericField('f_atBats', 'atBats');
+  numericField('f_struckOut', 'struckOut');
   document.getElementById('f_note').oninput = e => form.note = e.target.value;
   if (document.getElementById('f_opponent')) {
     document.getElementById('f_opponent').oninput = e => form.opponent = e.target.value;
-    document.getElementById('f_scoreSelf').onchange = e => form.scoreSelf = +e.target.value;
-    document.getElementById('f_scoreOpp').onchange = e => form.scoreOpp = +e.target.value;
+    numericField('f_scoreSelf', 'scoreSelf');
+    numericField('f_scoreOpp', 'scoreOpp');
     document.getElementById('f_venue').oninput = e => form.venue = e.target.value;
     document.querySelectorAll('#f_result .seg-item').forEach(el=>{ el.onclick = () => { form.result = el.dataset.v; render(); }; });
   }
