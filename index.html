@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Baseball Growth Coach · 莀安 Demo v8 (Gemini AI)</title>
+<title>Baseball Growth Coach · 莀安 Demo v8.1 (多模型AI)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -444,13 +444,20 @@ const I18N = {
   ai_close: { zh:'关闭', en:'Close' },
   ai_back: { zh:'返回', en:'Back' },
   ai_using_mock: { zh:'当前使用本地规则引擎（无需联网）', en:'Local rule-based engine (works offline)' },
-  ai_using_gemini: { zh:'🤖 正在调用 Gemini AI 教练', en:'🤖 Powered by Gemini AI Coach' },
-  ai_using_fallback: { zh:'⚠️ Gemini 调用失败，已自动切换本地引擎', en:'⚠️ Gemini failed, switched to local engine' },
+  ai_using_gemini: { zh:'🤖 AI 教练云端分析中', en:'🤖 AI Coach cloud analysis' },
+  ai_using_fallback: { zh:'⚠️ 云端调用失败，已自动切换本地引擎', en:'⚠️ Cloud call failed, switched to local engine' },
   ai_settings: { zh:'🤖 AI 教练设置', en:'🤖 AI Coach Settings' },
-  ai_settings_sub: { zh:'接入 Google Gemini 1.5 Flash，每次分析自动打分并生成针对性建议。免费层每天 1500 次。', en:'Hook up Google Gemini 1.5 Flash. Local compute only sends numeric angles, not videos. Free tier: 1500/day.' },
-  ai_enable: { zh:'启用 Gemini 真AI', en:'Enable Gemini AI' },
+  ai_settings_sub: { zh:'接入国产大模型（香港直连、中文最优）。本机只发送 4 个数字角度，视频永不离开设备。', en:'Connect a mainland-China LLM (direct from HK, best Chinese). Only 4 numeric angles are sent — video never leaves the device.' },
+  ai_enable: { zh:'启用云端 AI 教练', en:'Enable Cloud AI Coach' },
+  ai_provider: { zh:'服务商', en:'Provider' },
+  ai_provider_zhipu: { zh:'智谱 GLM-4-Flash（免费）', en:'Zhipu GLM-4-Flash (free)' },
+  ai_provider_deepseek: { zh:'DeepSeek Chat（￥便宜）', en:'DeepSeek Chat (cheap)' },
+  ai_provider_gemini: { zh:'Google Gemini（香港被墙）', en:'Google Gemini (blocked in HK)' },
   ai_apikey: { zh:'API Key（保存到本机浏览器）', en:'API Key (stored locally)' },
-  ai_getkey: { zh:'👉 在此免费申请（Google 账号）', en:'👉 Free signup (Google account)' },
+  ai_getkey: { zh:'👉 在此免费申请', en:'👉 Free signup' },
+  ai_getkey_zhipu: { zh:'👉 open.bigmodel.cn 免费申请', en:'👉 Free at open.bigmodel.cn' },
+  ai_getkey_deepseek: { zh:'👉 platform.deepseek.com 申请', en:'👉 Signup at platform.deepseek.com' },
+  ai_getkey_gemini: { zh:'👉 aistudio.google.com（香港不可用）', en:'👉 aistudio.google.com (unavailable in HK)' },
   ai_show: { zh:'显示', en:'Show' },
   ai_hide: { zh:'隐藏', en:'Hide' },
   ai_test: { zh:'🔌 测试连接', en:'🔌 Test connection' },
@@ -460,8 +467,9 @@ const I18N = {
   ai_settings_need_key: { zh:'请先填写 API Key', en:'Please enter API Key first' },
   ai_redo_gemini: { zh:'🔄 重新用 AI 分析', en:'🔄 Re-run with AI' },
   ai_redo_mock: { zh:'🔄 重新用本地引擎', en:'🔄 Re-run with local engine' },
-  ai_eval_loading: { zh:'🧠 Gemini 思考中…', en:'🧠 Gemini thinking…' },
-  ai_eval_tip: { zh:'通常 1-3 秒', en:'Usually 1-3 seconds' },
+  ai_eval_loading: { zh:'🧠 AI 教练思考中…', en:'🧠 AI Coach thinking…' },
+  ai_eval_tip: { zh:'通常 2-5 秒', en:'Usually 2-5 seconds' },
+  ai_hk_notice: { zh:'ℹ️ Gemini / OpenAI / Claude 均不支持香港地区，建议用智谱或 DeepSeek。', en:'ℹ️ Gemini / OpenAI / Claude do not serve Hong Kong. Use Zhipu or DeepSeek instead.' },
   ai_knee_hint: { zh:'提示：让镜头能拍到完整上半身（头顶到胯部），光线充足。', en:'Tip: film full upper body (head to hips), good lighting.' },
   ai_err_no_pose: { zh:'未检测到人体，请让镜头拍到完整上半身', en:'No body detected. Show full upper body to the camera.' },
   ai_err_too_short: { zh:'视频太短（<0.5 秒）', en:'Video too short (<0.5s)' },
@@ -594,8 +602,30 @@ function loadData() {
 }
 function saveData(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
 
+// ===== v8 LLM 多 provider 配置（必须放在使用前，避免 const TDZ 报错）=====
+const LLM = {
+  enabled: false,
+  provider: 'zhipu',
+  apiKey: '',
+  models: { zhipu:'glm-4-flash', deepseek:'deepseek-chat', gemini:'gemini-1.5-flash-latest' }
+};
+function llmModel() { return LLM.models[LLM.provider] || LLM.models.zhipu; }
+function llmLabel() { return LLM.provider==='zhipu' ? 'Zhipu GLM-4-Flash' : LLM.provider==='deepseek' ? 'DeepSeek Chat' : 'Gemini 1.5 Flash'; }
+function loadLLMConfig() {
+  try {
+    const s = JSON.parse(localStorage.getItem('llm_config_v2')||'{}');
+    if (typeof s.enabled === 'boolean') LLM.enabled = s.enabled;
+    if (typeof s.provider === 'string' && s.provider) LLM.provider = s.provider;
+    if (typeof s.apiKey === 'string') LLM.apiKey = s.apiKey;
+    if (s.models && typeof s.models === 'object') { Object.assign(LLM.models, s.models); }
+  } catch(e) {}
+}
+function saveLLMConfig() {
+  try { localStorage.setItem('llm_config_v2', JSON.stringify({enabled:LLM.enabled, provider:LLM.provider, apiKey:LLM.apiKey, models:LLM.models})); } catch(e) {}
+}
+
 let DATA = loadData();
-loadGeminiConfig();
+loadLLMConfig();
 let currentTab = 'home';
 let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:80, strike:70, mood:4, pitchCount:80, strikeout:0, hits:0, atBats:0, struckOut:0, note:'', location:null, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:'' };
 let bodyForm = { date: new Date().toISOString().slice(0,10), height:'', weight:'' };
@@ -1747,26 +1777,36 @@ function renderMe(s) {
     <div class="card" style="background:linear-gradient(135deg,#faf5ff,#f3e8ff);border-color:#a855f7">
       <h3 style="color:#6b21a8">${t('ai_settings')}</h3>
       <div style="font-size:11px;color:#6b21a8;margin-bottom:10px;line-height:1.6">${t('ai_settings_sub')}</div>
+      <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;font-size:11px;color:#92400e;margin-bottom:10px;line-height:1.5">${t('ai_hk_notice')}</div>
       <div style="display:flex;align-items:center;gap:10px;padding:8px 0">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
-          <input type="checkbox" id="gem_enabled" ${GEMINI.enabled?'checked':''} style="width:18px;height:18px;accent-color:#7c3aed;cursor:pointer">
+          <input type="checkbox" id="llm_enabled" ${LLM.enabled?'checked':''} style="width:18px;height:18px;accent-color:#7c3aed;cursor:pointer">
           <span style="font-size:13px;font-weight:600;color:#1f3a5f">${t('ai_enable')}</span>
         </label>
-        <span id="gemStatus" class="pill" style="background:${GEMINI.enabled?(GEMINI.apiKey?'#14532d;color:#bbf7d0':'#7f1d1d;color:#fca5a5'):'#e5e7eb;color:#64748b'}">${GEMINI.enabled?(GEMINI.apiKey?(LANG==='zh'?'✓ 已启用':'✓ ON'):(LANG==='zh'?'需填 Key':'Need Key')):(LANG==='zh'?'未启用':'OFF')}</span>
+        <span id="llmStatus" class="pill" style="background:${LLM.enabled?(LLM.apiKey?'#14532d;color:#bbf7d0':'#7f1d1d;color:#fca5a5'):'#e5e7eb;color:#64748b'}">${LLM.enabled?(LLM.apiKey?(LANG==='zh'?'✓ 已启用':'✓ ON'):(LANG==='zh'?'需填 Key':'Need Key')):(LANG==='zh'?'未启用':'OFF')}</span>
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label>${t('ai_provider')}</label>
+        <select id="llm_provider" style="width:100%;padding:9px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:13px;background:#fff;color:#1f3a5f">
+          <option value="zhipu" ${LLM.provider==='zhipu'?'selected':''}>${t('ai_provider_zhipu')}</option>
+          <option value="deepseek" ${LLM.provider==='deepseek'?'selected':''}>${t('ai_provider_deepseek')}</option>
+          <option value="gemini" ${LLM.provider==='gemini'?'selected':''}>${t('ai_provider_gemini')}</option>
+        </select>
+        <div style="font-size:10px;color:#7c3aed;margin-top:4px">model: <code style="background:#f3e8ff;padding:1px 5px;border-radius:4px" id="llm_model_label">${llmModel()}</code></div>
       </div>
       <div class="field" style="margin-top:8px">
         <label>${t('ai_apikey')}</label>
         <div style="display:flex;gap:6px">
-          <input type="password" id="gem_key" value="${GEMINI.apiKey}" placeholder="AIzaSy..." autocomplete="off" style="flex:1;font-family:monospace;font-size:12px">
-          <button type="button" id="gem_toggle_show" style="padding:9px 12px;background:#e5e7eb;color:#1f3a5f;border:none;border-radius:10px;font-size:12px;cursor:pointer">${t('ai_show')}</button>
+          <input type="password" id="llm_key" value="${LLM.apiKey}" placeholder="粘贴 API Key" autocomplete="off" style="flex:1;font-family:monospace;font-size:12px">
+          <button type="button" id="llm_toggle_show" style="padding:9px 12px;background:#e5e7eb;color:#1f3a5f;border:none;border-radius:10px;font-size:12px;cursor:pointer">${t('ai_show')}</button>
         </div>
-        <div style="font-size:10px;color:#7c3aed;margin-top:6px"><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#7c3aed;text-decoration:underline">${t('ai_getkey')}</a></div>
+        <div style="font-size:10px;color:#7c3aed;margin-top:6px"><a id="llm_getkey" href="${LLM.provider==='deepseek'?'https://platform.deepseek.com/':LLM.provider==='gemini'?'https://aistudio.google.com/app/apikey':'https://open.bigmodel.cn/'}" target="_blank" style="color:#7c3aed;text-decoration:underline">${LLM.provider==='deepseek'?t('ai_getkey_deepseek'):LLM.provider==='gemini'?t('ai_getkey_gemini'):t('ai_getkey_zhipu')}</a></div>
       </div>
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn" id="gem_save" style="flex:1;background:linear-gradient(135deg,#7c3aed,#a855f7)">💾 ${LANG==='zh'?'保存':'Save'}</button>
-        <button class="btn ghost" id="gem_test" style="flex:1">${t('ai_test')}</button>
+        <button class="btn" id="llm_save" style="flex:1;background:linear-gradient(135deg,#7c3aed,#a855f7)">💾 ${LANG==='zh'?'保存':'Save'}</button>
+        <button class="btn ghost" id="llm_test" style="flex:1">${t('ai_test')}</button>
       </div>
-      <div id="gem_test_result" style="margin-top:10px;font-size:12px"></div>
+      <div id="llm_test_result" style="margin-top:10px;font-size:12px"></div>
     </div>
     <div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
       <h3 style="color:#1e40af">${t('all_data')}</h3>
@@ -1798,52 +1838,70 @@ function renderMe(s) {
   document.querySelectorAll('[data-del-body]').forEach(el=>{
     el.onclick = () => { if (confirm(t('yes')+'?')) { DATA.bodyLogs = DATA.bodyLogs.filter(r => r.id != el.dataset.delBody); saveData(DATA); render(); } };
   });
-  bindGeminiSettings();
+  bindLLMSettings();
 }
 
-// ===== v8: Gemini 教练设置卡 绑定 =====
-function bindGeminiSettings() {
-  const enEl = document.getElementById('gem_enabled');
+// ===== v8: LLM 多 provider 设置卡 绑定 =====
+function updateLLMStatusUI() {
+  const st = document.getElementById('llmStatus');
+  if (!st) return;
+  st.textContent = LLM.enabled ? (LLM.apiKey ? (LANG==='zh'?'✓ 已启用':'✓ ON') : (LANG==='zh'?'需填 Key':'Need Key')) : (LANG==='zh'?'未启用':'OFF');
+  st.style.background = LLM.enabled ? (LLM.apiKey ? '#14532d' : '#7f1d1d') : '#e5e7eb';
+  st.style.color = LLM.enabled ? (LLM.apiKey ? '#bbf7d0' : '#fca5a5') : '#64748b';
+}
+function updateLLMGetKeyLink() {
+  const a = document.getElementById('llm_getkey');
+  if (!a) return;
+  const link = LLM.provider==='deepseek' ? 'https://platform.deepseek.com/'
+             : LLM.provider==='gemini'   ? 'https://aistudio.google.com/app/apikey'
+             : 'https://open.bigmodel.cn/';
+  const label = LLM.provider==='deepseek' ? t('ai_getkey_deepseek')
+              : LLM.provider==='gemini'   ? t('ai_getkey_gemini')
+              : t('ai_getkey_zhipu');
+  a.href = link; a.textContent = label;
+  const ml = document.getElementById('llm_model_label');
+  if (ml) ml.textContent = llmModel();
+}
+function bindLLMSettings() {
+  const enEl = document.getElementById('llm_enabled');
   if (!enEl) return;
   enEl.onchange = e => {
-    GEMINI.enabled = e.target.checked;
-    saveGeminiConfig();
-    const st = document.getElementById('gemStatus');
-    if (st) {
-      st.textContent = GEMINI.enabled ? (GEMINI.apiKey ? (LANG==='zh'?'✓ 已启用':'✓ ON') : (LANG==='zh'?'需填 Key':'Need Key')) : (LANG==='zh'?'未启用':'OFF');
-      st.style.background = GEMINI.enabled ? (GEMINI.apiKey ? '#14532d' : '#7f1d1d') : '#e5e7eb';
-      st.style.color = GEMINI.enabled ? (GEMINI.apiKey ? '#bbf7d0' : '#fca5a5') : '#64748b';
-    }
+    LLM.enabled = e.target.checked;
+    saveLLMConfig();
+    updateLLMStatusUI();
     toast(t('ai_settings_saved'));
   };
-  const keyEl = document.getElementById('gem_key');
-  if (keyEl) keyEl.oninput = e => { GEMINI.apiKey = e.target.value.trim(); saveGeminiConfig(); };
-  const tgl = document.getElementById('gem_toggle_show');
+  const provEl = document.getElementById('llm_provider');
+  if (provEl) provEl.onchange = e => {
+    LLM.provider = e.target.value;
+    saveLLMConfig();
+    updateLLMGetKeyLink();
+    toast(t('ai_settings_saved'));
+  };
+  const keyEl = document.getElementById('llm_key');
+  if (keyEl) keyEl.oninput = e => { LLM.apiKey = e.target.value.trim(); saveLLMConfig(); updateLLMStatusUI(); };
+  const tgl = document.getElementById('llm_toggle_show');
   if (tgl) tgl.onclick = () => {
-    const inp = document.getElementById('gem_key');
+    const inp = document.getElementById('llm_key');
     if (!inp) return;
     const showing = inp.type === 'text';
     inp.type = showing ? 'password' : 'text';
     tgl.textContent = showing ? t('ai_show') : t('ai_hide');
   };
-  const sv = document.getElementById('gem_save');
+  const sv = document.getElementById('llm_save');
   if (sv) sv.onclick = () => {
-    saveGeminiConfig();
+    saveLLMConfig();
+    updateLLMStatusUI();
     toast(t('ai_settings_saved'));
   };
-  const ts = document.getElementById('gem_test');
-  const rs = document.getElementById('gem_test_result');
+  const ts = document.getElementById('llm_test');
+  const rs = document.getElementById('llm_test_result');
   if (ts) ts.onclick = async () => {
-    if (!GEMINI.apiKey) { if (rs) rs.innerHTML = `<span style="color:#dc2626">${t('ai_settings_need_key')}</span>`; return; }
-    if (rs) rs.innerHTML = `<span style="color:#7c3aed">⏳ ...</span>`;
+    if (!LLM.apiKey) { if (rs) rs.innerHTML = `<span style="color:#dc2626">${t('ai_settings_need_key')}</span>`; return; }
+    if (rs) rs.innerHTML = `<span style="color:#7c3aed">⏳ ${llmLabel()} ...</span>`;
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI.model}:generateContent?key=${encodeURIComponent(GEMINI.apiKey)}`;
-      const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({contents:[{role:'user',parts:[{text:'Reply OK'}]}]}) });
-      if (!r.ok) {
-        const t1 = await r.text().catch(()=>'');
-        throw new Error('HTTP '+r.status+': '+(t1.slice(0,100)||r.statusText));
-      }
-      if (rs) rs.innerHTML = `<span style="color:#16a34a">${t('ai_test_ok')} (${GEMINI.model})</span>`;
+      await pingLLM();
+      if (rs) rs.innerHTML = `<span style="color:#16a34a">${t('ai_test_ok')} (${llmLabel()})</span>`;
     } catch(e) {
       if (rs) rs.innerHTML = `<span style="color:#dc2626">${t('ai_test_fail')}${e.message}</span>`;
     }
@@ -2080,9 +2138,16 @@ async function runAnalysis() {
   }
   setProg(92, t('ai_calc_angle'));
   AI.angles = poseSeriesToAngles(poses);
+  AI.fallbackEval = mockCoachEval(AI.angles);
+  AI.feedback = AI.fallbackEval;
+  AI.feedbackSource = 'mock';
   setProg(100, '✓');
   await new Promise(r => setTimeout(r, 350));
-  AI.state = 'result';
+  if (LLM.enabled && LLM.apiKey) {
+    AI.state = 'ai-eval';
+  } else {
+    AI.state = 'result';
+  }
   renderAIStep();
 }
 
@@ -2215,21 +2280,10 @@ function mockCoachEval(angles) {
   };
 }
 
-// ===== v8 Gemini AI 集成 =====
-const GEMINI = { enabled:false, apiKey:'', model:'gemini-1.5-flash-latest', lastSource:'mock' };
-function loadGeminiConfig() {
-  try {
-    const s = JSON.parse(localStorage.getItem('gemini_config_v1')||'{}');
-    if (typeof s.enabled === 'boolean') GEMINI.enabled = s.enabled;
-    if (typeof s.apiKey === 'string') GEMINI.apiKey = s.apiKey;
-    if (typeof s.model === 'string' && s.model) GEMINI.model = s.model;
-  } catch(e) {}
-}
-function saveGeminiConfig() {
-  try { localStorage.setItem('gemini_config_v1', JSON.stringify({enabled:GEMINI.enabled, apiKey:GEMINI.apiKey, model:GEMINI.model})); } catch(e) {}
-}
-async function callGeminiCoach(action, angles, fallback) {
-  if (!GEMINI.enabled || !GEMINI.apiKey) throw new Error(LANG==='zh'?'AI 教练未启用':'AI Coach not enabled');
+// ===== v8 LLM 多 provider 集成（智谱 GLM / DeepSeek / Gemini）=====
+// 注意：配置对象与读写函数已上移至文件前部（避免 const TDZ 顺序问题）
+
+function buildPrompts(action, angles) {
   const numFrames = angles.length;
   const releaseIdx = Math.max(0, Math.floor(numFrames * 0.6) - 1);
   const elbowAtRelease = +(angles[releaseIdx]?.elbow ?? 0).toFixed(1);
@@ -2271,27 +2325,18 @@ async function callGeminiCoach(action, angles, fallback) {
     `  "tips": ["<tip1>", "<tip2>", "<tip3>"],\n`+
     `  "encourage": "<≤20 words warm encouragement, no cliches>"\n`+
     `}`;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI.model}:generateContent?key=${encodeURIComponent(GEMINI.apiKey)}`;
-  const body = {
-    contents: [{ role:'user', parts:[{ text: userPrompt }] }],
-    systemInstruction: { parts:[{ text: sysPrompt }] },
-    generationConfig: { temperature: 0.4, maxOutputTokens: 500, responseMimeType: 'application/json' }
-  };
-  const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  if (!resp.ok) {
-    const errTxt = await resp.text().catch(()=>'');
-    throw new Error('HTTP '+resp.status+': '+(errTxt.slice(0,150)||resp.statusText));
-  }
-  const data = await resp.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  const json = text.trim().replace(/^```json\s*/i,'').replace(/```$/,'').trim();
-  let parsed;
+  return { sysPrompt, userPrompt };
+}
+
+function parseLLMJson(text, fallback) {
+  const json = String(text||'').trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```$/,'').trim();
+  let parsed = null;
   try { parsed = JSON.parse(json); }
   catch(e) {
     const m = json.match(/\{[\s\S]*\}/);
-    if (m) { try { parsed = JSON.parse(m[0]); } catch(e2) { throw new Error('JSON 解析失败: '+text.slice(0,80)); } }
-    else throw new Error('JSON 解析失败: '+text.slice(0,80));
+    if (m) { try { parsed = JSON.parse(m[0]); } catch(e2) {} }
   }
+  if (!parsed) throw new Error(LANG==='zh'?'AI 返回格式异常: '+json.slice(0,80) : 'Bad AI response: '+json.slice(0,80));
   return {
     score: Math.max(0, Math.min(100, Math.round(+parsed.score || fallback.score))),
     problem: { label: fallback.problem.label, msg: String(parsed.problem||fallback.problem.msg) },
@@ -2301,28 +2346,108 @@ async function callGeminiCoach(action, angles, fallback) {
   };
 }
 
+// OpenAI 兼容协议（智谱 GLM / DeepSeek 共用）
+async function callOpenAICompat(url, key, model, sysPrompt, userPrompt, fallback) {
+  const body = {
+    model: model,
+    messages: [
+      { role:'system', content: sysPrompt },
+      { role:'user', content: userPrompt }
+    ],
+    temperature: 0.4,
+    max_tokens: 900,
+    response_format: { type: 'json_object' }
+  };
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+key },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const errTxt = await resp.text().catch(()=>'');
+    throw new Error('HTTP '+resp.status+': '+(errTxt.slice(0,180)||resp.statusText));
+  }
+  const data = await resp.json();
+  const text = data?.choices?.[0]?.message?.content || '';
+  return parseLLMJson(text, fallback);
+}
+
+async function callGeminiCompat(key, model, sysPrompt, userPrompt, fallback) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+  const body = {
+    contents: [{ role:'user', parts:[{ text: userPrompt }] }],
+    systemInstruction: { parts:[{ text: sysPrompt }] },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 900, responseMimeType: 'application/json' }
+  };
+  const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (!resp.ok) {
+    const errTxt = await resp.text().catch(()=>'');
+    throw new Error('HTTP '+resp.status+': '+(errTxt.slice(0,180)||resp.statusText));
+  }
+  const data = await resp.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return parseLLMJson(text, fallback);
+}
+
+async function callLLMCoach(action, angles, fallback) {
+  if (!LLM.enabled || !LLM.apiKey) throw new Error(LANG==='zh'?'AI 教练未启用':'AI Coach not enabled');
+  const { sysPrompt, userPrompt } = buildPrompts(action, angles);
+  const model = llmModel();
+  if (LLM.provider === 'zhipu') {
+    return callOpenAICompat('https://open.bigmodel.cn/api/paas/v4/chat/completions', LLM.apiKey, model, sysPrompt, userPrompt, fallback);
+  }
+  if (LLM.provider === 'deepseek') {
+    return callOpenAICompat('https://api.deepseek.com/chat/completions', LLM.apiKey, model, sysPrompt, userPrompt, fallback);
+  }
+  return callGeminiCompat(LLM.apiKey, model, sysPrompt, userPrompt, fallback);
+}
+
+// 「测试连接」用：轻量 ping
+async function pingLLM() {
+  if (!LLM.apiKey) throw new Error(LANG==='zh'?'请先填写 API Key':'Enter API Key first');
+  const model = llmModel();
+  if (LLM.provider === 'zhipu' || LLM.provider === 'deepseek') {
+    const url = LLM.provider==='zhipu'
+      ? 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+      : 'https://api.deepseek.com/chat/completions';
+    const resp = await fetch(url, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+LLM.apiKey },
+      body: JSON.stringify({ model, messages:[{role:'user',content:'Reply with exactly: OK'}], max_tokens: 10 })
+    });
+    if (!resp.ok) { const t1 = await resp.text().catch(()=>''); throw new Error('HTTP '+resp.status+': '+(t1.slice(0,150)||resp.statusText)); }
+    const d = await resp.json();
+    return d?.choices?.[0]?.message?.content || 'OK';
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(LLM.apiKey)}`;
+  const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({contents:[{role:'user',parts:[{text:'Reply with exactly: OK'}]}]}) });
+  if (!resp.ok) { const t1 = await resp.text().catch(()=>''); throw new Error('HTTP '+resp.status+': '+(t1.slice(0,150)||resp.statusText)); }
+  const d = await resp.json();
+  return d?.candidates?.[0]?.content?.parts?.[0]?.text || 'OK';
+}
+
 function aiEvalHTML() {
   return `<div class="step-card">
     <span class="step-num">${t('ai_using_gemini')}</span>
     <div style="text-align:center;padding:30px 10px">
       <div style="font-size:48px;animation:aiBlink 1.5s infinite">🧠</div>
       <div style="color:#cbd5e1;font-size:13px;margin-top:14px">${t('ai_eval_loading')}</div>
-      <div style="color:#64748b;font-size:11px;margin-top:6px">${GEMINI.model}</div>
+      <div style="color:#64748b;font-size:11px;margin-top:6px">${llmLabel()}</div>
     </div>
   </div>`;
 }
 
 async function runAIEval() {
   try {
-    const out = await callGeminiCoach(AI.action, AI.angles, AI.fallbackEval);
+    const out = await callLLMCoach(AI.action, AI.angles, AI.fallbackEval);
     AI.feedback = out;
-    AI.feedbackSource = 'gemini';
+    AI.feedbackSource = 'cloud';
     AI.state = 'result';
   } catch(e) {
     AI.feedback = AI.fallbackEval;
     AI.feedbackSource = 'mock-fallback';
     AI.state = 'result';
-    setTimeout(()=> toast('⚠️ Gemini: '+e.message, 4000), 300);
+    setTimeout(()=> toast('⚠️ '+e.message, 4000), 300);
   }
   renderAIStep();
 }
@@ -2342,14 +2467,14 @@ function resultHTML() {
   const svTrunk = angStrip(AI.angles.map(a=>a&&a.trunkTilt), '#34d399');
   const isSwing = AI.action === 'swing';
   const subHtml = ev.secondary ? `<div style="margin-top:10px;color:#fca5a5;padding:8px;background:#7f1d1d40;border-radius:6px;font-size:12px">📌 ${ev.secondary.msg}</div>` : '';
-  const sourceBanner = AI.feedbackSource==='gemini'
-    ? `<div style="background:linear-gradient(90deg,#7c3aed,#a855f7);color:#fff;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:10px"><b>${t('ai_using_gemini')}</b></div>`
+  const sourceBanner = AI.feedbackSource==='cloud'
+    ? `<div style="background:linear-gradient(90deg,#7c3aed,#a855f7);color:#fff;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:10px"><b>${t('ai_using_gemini')} · ${llmLabel()}</b></div>`
     : AI.feedbackSource==='mock-fallback'
       ? `<div style="background:#7f1d1d;color:#fca5a5;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:10px">${t('ai_using_fallback')}</div>`
       : `<p style="color:#64748b;font-size:11px;margin-top:10px">${t('ai_using_mock')}</p>`;
-  const redoBtn = GEMINI.enabled && GEMINI.apiKey
+  const redoBtn = LLM.enabled && LLM.apiKey
     ? `<button class="opt-btn" style="flex:1;background:#7c3aed;color:#fff" id="aiRedoAI">${t('ai_redo_gemini')}</button>`
-    : (AI.feedbackSource==='gemini' || AI.feedbackSource==='mock-fallback'
+    : (AI.feedbackSource==='cloud' || AI.feedbackSource==='mock-fallback'
        ? `<button class="opt-btn" style="flex:1;background:#334155" id="aiRedoMock">${t('ai_redo_mock')}</button>`
        : '');
   return `<div class="step-card">
@@ -2394,7 +2519,7 @@ function bindResult() {
   const redoAI = document.getElementById('aiRedoAI');
   if (redoAI) {
     redoAI.onclick = () => {
-      if (!GEMINI.enabled || !GEMINI.apiKey) { toast(t('ai_settings_need_key')); return; }
+      if (!LLM.enabled || !LLM.apiKey) { toast(t('ai_settings_need_key')); return; }
       AI.feedback = null;
       AI.state = 'ai-eval';
       renderAIStep();
@@ -2412,7 +2537,7 @@ function bindResult() {
   document.getElementById('aiSave').onclick = () => {
     const ev = AI.feedback || mockCoachEval(AI.angles);
     const ZH = LANG==='zh';
-    const srcTag = AI.feedbackSource==='gemini' ? '🤖 Gemini' : '📐 本地';
+    const srcTag = AI.feedbackSource==='cloud' ? '☁️ '+llmLabel() : '📐 本地';
     const r = {
       date: new Date().toISOString().slice(0,10),
       type: AI.action === 'swing' ? 'train' : 'train',
