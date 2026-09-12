@@ -182,6 +182,44 @@
   #printReport td { padding:5px 8px; border-bottom:1px solid #e5e7eb; }
   #printReport .footer { margin-top:18px; font-size:10px; color:#94a3b8; text-align:center; border-top:1px solid #e5e7eb; padding-top:8px; }
   #printReport svg { width:100%; height:auto; }
+
+  /* v7 AI Coach modal */
+  #aiModal { position:fixed; inset:0; background:#0f172a; z-index:9999; overflow-y:auto; display:none; color:#f1f5f9; font-size:13px; }
+  #aiModal.show { display:block; }
+  #aiModal .top-bar { position:sticky; top:0; background:#1e293b; padding:14px 16px; display:flex; align-items:center; gap:10px; border-bottom:1px solid #334155; z-index:10; }
+  #aiModal .top-bar h3 { margin:0; flex:1; font-size:15px; }
+  #aiModal .x-btn { width:32px; height:32px; border-radius:50%; background:#ef4444; color:white; border:none; font-size:14px; cursor:pointer; }
+  #aiModal .step-area { padding:20px 16px; }
+  #aiModal .step-card { background:#1e293b; border-radius:12px; padding:18px; margin-bottom:14px; border:1px solid #334155; }
+  #aiModal .step-num { display:inline-block; background:#fbbf24; color:#1e1b4b; font-weight:700; padding:3px 10px; border-radius:20px; font-size:11px; margin-bottom:10px; }
+  #aiModal .opt-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+  #aiModal .opt-btn { background:#334155; border:2px solid #475569; padding:18px 12px; border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; color:#f1f5f9; }
+  #aiModal .opt-btn:hover { border-color:#fbbf24; background:#475569; }
+  #aiModal .opt-btn.sel { border-color:#fbbf24; background:#fbbf24; color:#1e1b4b; }
+  #aiModal .vid-wrap { position:relative; background:black; border-radius:10px; overflow:hidden; aspect-ratio:4/3; max-width:480px; margin:10px auto; }
+  #aiModal .vid-wrap video { width:100%; height:100%; object-fit:cover; display:block; }
+  #aiModal .vid-wrap canvas { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #aiModal .rec-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:#ef4444; margin-right:6px; animation:aiBlink 1s infinite; }
+  @keyframes aiBlink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+  #aiModal .progress { height:6px; background:#334155; border-radius:3px; overflow:hidden; margin:10px 0; }
+  #aiModal .progress-bar { height:100%; background:linear-gradient(90deg,#fbbf24,#f59e0b); width:0%; transition:width 0.3s; }
+  #aiModal .frame-strip { display:grid; grid-template-columns:repeat(auto-fill,minmax(72px,1fr)); gap:6px; margin:10px 0; }
+  #aiModal .frame-strip canvas { width:100%; aspect-ratio:4/3; border-radius:6px; background:#000; object-fit:cover; }
+  #aiModal .angle-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0; }
+  #aiModal .angle-card { background:#0f172a; border-radius:8px; padding:10px; border:1px solid #334155; }
+  #aiModal .angle-card .lbl { font-size:10px; color:#94a3b8; margin-bottom:3px; }
+  #aiModal .angle-card .val { font-size:18px; font-weight:700; color:#fbbf24; }
+  #aiModal .angle-card .sub { font-size:10px; color:#64748b; margin-top:2px; }
+  #aiModal .ai-report { background:linear-gradient(135deg,#1e293b,#0f172a); border-radius:12px; padding:18px; margin:10px 0; border:2px solid #fbbf24; }
+  #aiModal .ai-report h4 { margin:0 0 8px 0; color:#fbbf24; font-size:13px; }
+  #aiModal .ai-report .problem { color:#fca5a5; font-size:13px; line-height:1.6; margin-bottom:12px; padding:10px; background:#7f1d1d40; border-radius:8px; }
+  #aiModal .ai-report .tip-row { color:#cbd5e1; font-size:12px; line-height:1.6; margin:6px 0; padding-left:8px; border-left:2px solid #fbbf24; }
+  #aiModal .ai-report .encourage { color:#fef3c7; font-style:italic; font-size:13px; margin-top:12px; padding-top:10px; border-top:1px solid #475569; }
+  #aiModal .ai-report .score { display:inline-block; background:#fbbf24; color:#1e1b4b; font-weight:700; padding:4px 14px; border-radius:20px; font-size:18px; }
+  #aiModal .pill { display:inline-block; padding:3px 10px; background:#334155; border-radius:12px; font-size:11px; margin-right:4px; }
+  #aiModal .pill.warn { background:#7c2d12; color:#fed7aa; }
+  #aiModal .pill.ok { background:#14532d; color:#bbf7d0; }
+  #aiModal .err { color:#fca5a5; padding:10px; background:#7f1d1d40; border-radius:8px; margin:10px 0; }
 </style>
 </head>
 <body>
@@ -375,6 +413,41 @@ const I18N = {
   n_train: { zh:'训练/比赛记录', en:'Training/match logs' }, n_body: { zh:'身体数据', en:'Body records' },
   n_pitch: { zh:'单球记录', en:'Pitches tracked' }, n_dev: { zh:'设备数据', en:'Device records' },
   earliest: { zh:'最早记录', en:'Earliest' }, streak: { zh:'坚持天数', en:'Streak (days)' },
+  // ===== v7 AI 视频分析（MediaPipe 姿态 + AI 教练） =====
+  ai_entry_title: { zh:'🤖 AI 视频分析教练', en:'🤖 AI Video Coach' },
+  ai_entry_sub: { zh:'录制 ≤3 秒的投球或打击动作，本机 MediaPipe 提取关键帧姿态，AI 教练给出技术动作分析与改进建议。视频不上传。', en:'Record a ≤3s pitch or swing. On-device MediaPipe extracts keyframe poses, then AI coach returns technique feedback. Video never leaves your device.' },
+  ai_start: { zh:'🎥 开始 AI 视频分析', en:'🎥 Start AI Video Coach' },
+  ai_step1: { zh:'第 1 步：选择动作', en:'Step 1: Choose motion' },
+  ai_pitch: { zh:'⛳ 投球', en:'⛳ Pitching' },
+  ai_swing: { zh:'🏏 打击', en:'🏏 Batting' },
+  ai_step2: { zh:'第 2 步：选择视频源', en:'Step 2: Choose video source' },
+  ai_record: { zh:'🎥 录像（≤3 秒）', en:'🎥 Record (≤3s)' },
+  ai_upload: { zh:'📁 从相册选', en:'📁 Pick from album' },
+  ai_recording: { zh:'● 正在录像…保持动作，不要移动手机', en:'● Recording... hold the phone still' },
+  ai_rec_ready: { zh:'准备好就开始', en:'Ready to record' },
+  ai_load_video: { zh:'读取视频中…', en:'Loading video...' },
+  ai_load_model: { zh:'首次加载 MediaPipe 模型（约 5 MB，需 5-15 秒）…', en:'Loading MediaPipe model (~5MB, 5-15s first time)...' },
+  ai_extract: { zh:'抽取关键帧（每 100ms 一帧）…', en:'Extracting keyframes (every 100ms)...' },
+  ai_pose_detect: { zh:'MediaPipe 姿态估计中…', en:'Detecting poses via MediaPipe...' },
+  ai_calc_angle: { zh:'计算关节角度…', en:'Computing joint angles...' },
+  ai_send: { zh:'📤 发送给 AI 教练', en:'📤 Send to AI Coach' },
+  ai_save_review: { zh:'💾 保存到复盘', en:'💾 Save to Reflections' },
+  ai_title_result: { zh:'🧑‍🏫 AI 教练分析报告', en:'🧑‍🏫 AI Coach Analysis' },
+  ai_metric_elbow: { zh:'肘角（伸展）', en:'Elbow angle' },
+  ai_metric_hipshoulder: { zh:'髋肩分离角', en:'Hip-shoulder separation' },
+  ai_metric_trunk: { zh:'躯干侧倾角', en:'Trunk lateral tilt' },
+  ai_metric_stance: { zh:'两脚站距', en:'Stance width' },
+  ai_problem: { zh:'🔍 关键问题', en:'🔍 Key issue' },
+  ai_tips: { zh:'💡 训练建议', en:'💡 Tips' },
+  ai_encourage: { zh:'🌟 寄语', en:'🌟 Encouragement' },
+  ai_overall_score: { zh:'综合评分', en:'Overall score' },
+  ai_close: { zh:'关闭', en:'Close' },
+  ai_back: { zh:'返回', en:'Back' },
+  ai_using_mock: { zh:'当前使用本地规则引擎（无需联网）', en:'Local rule-based engine (works offline)' },
+  ai_knee_hint: { zh:'提示：让镜头能拍到完整上半身（头顶到胯部），光线充足。', en:'Tip: film full upper body (head to hips), good lighting.' },
+  ai_err_no_pose: { zh:'未检测到人体，请让镜头拍到完整上半身', en:'No body detected. Show full upper body to the camera.' },
+  ai_err_too_short: { zh:'视频太短（<0.5 秒）', en:'Video too short (<0.5s)' },
+  ai_err_camera: { zh:'无法访问摄像头：', en:'Cannot access camera: ' },
   export_section: { zh:'📤 数据导出（发明展准备）', en:'📤 Export (for Geneva)' },
   export_sub: { zh:'导出 CSV / JSON，可直接展示或分析', en:'Export CSV / JSON for the Geneva booth' },
   exp_csv: { zh:'📥 下载 CSV 数据', en:'📥 Download CSV' }, exp_pdf: { zh:'📄 导出成长报告 PDF', en:'📄 Export Growth Report PDF' },
@@ -1387,6 +1460,12 @@ function renderReview(s) {
       </p>
     </div>
 
+    <div class="card" style="background:linear-gradient(135deg,#312e81,#7c3aed);border-color:#a78bfa;color:white">
+      <h3 style="color:white">${t('ai_entry_title')}</h3>
+      <p style="font-size:12px;line-height:1.6;opacity:0.92;margin-bottom:10px">${t('ai_entry_sub')}</p>
+      <button class="btn" id="aiStartBtn" style="font-size:13px;padding:12px;background:#fbbf24;color:#1e1b4b;font-weight:700;border:none">${t('ai_start')}</button>
+    </div>
+
     <div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
       <h3>${t('export_section')}</h3>
       <p style="font-size:12px;color:#475569;margin-bottom:10px">${t('export_sub')}</p>
@@ -1428,6 +1507,7 @@ function renderReview(s) {
     toast('✓ CSV '+(LANG==='zh'?'已下载':'downloaded'));
   };
   document.getElementById('pdfBtn').onclick = exportPDF;
+  bindAIStartBtn();
   document.getElementById('jsonBtn').onclick = () => {
     const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
     const a = document.createElement('a');
@@ -1682,6 +1762,453 @@ function go(tab) { currentTab = tab; render(); }
 setInterval(()=>{ document.getElementById('clk').textContent = new Date().toTimeString().slice(0,5); }, 1000);
 if (LANG === 'en') { document.getElementById('langZh').classList.remove('on'); document.getElementById('langEn').classList.add('on'); document.documentElement.lang = 'en'; }
 render();
+// ===== v7 AI Coach 视频分析模块 =====
+const MP_LIB = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+const MP_WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task';
+
+const AI = { state: 'idle', action: null, videoUrl: null, frames: null, angles: null, landmarker: null };
+let _aiStream = null, _aiRecorder = null, _aiChunks = [];
+
+async function ensureLandmarker() {
+  if (AI.landmarker) return AI.landmarker;
+  const m = await import(MP_LIB);
+  const vision = await m.FilesetResolver.forVisionTasks(MP_WASM);
+  AI.landmarker = await m.PoseLandmarker.createFromOptions(vision, {
+    baseOptions: { modelAssetPath: MP_MODEL, delegate: 'GPU' },
+    runningMode: 'VIDEO', numPoses: 1,
+    minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5
+  });
+  return AI.landmarker;
+}
+
+function openAICoach() {
+  AI.state = 'choose-action';
+  AI.action = null;
+  document.getElementById('aiModal').classList.add('show');
+  renderAIStep();
+}
+
+function closeAICoach() {
+  if (AI.videoUrl) { URL.revokeObjectURL(AI.videoUrl); AI.videoUrl = null; }
+  stopAISteam();
+  AI.state = 'idle';
+  document.getElementById('aiModal').classList.remove('show');
+}
+
+function pickFromAlbum(file) {
+  if (!file) return;
+  if (AI.videoUrl) URL.revokeObjectURL(AI.videoUrl);
+  AI.videoUrl = URL.createObjectURL(file);
+  AI.state = 'loading-video';
+  renderAIStep();
+}
+
+function stopAISteam() {
+  if (_aiStream) { _aiStream.getTracks().forEach(t => t.stop()); _aiStream = null; }
+  if (_aiRecorder && _aiRecorder.state !== 'inactive') { try { _aiRecorder.stop(); } catch(e){} }
+}
+
+function renderAIStep() {
+  const r = document.getElementById('aiRoot');
+  r.innerHTML = '';
+  switch(AI.state) {
+    case 'choose-action': r.innerHTML = step1HTML(); bindStep1(); break;
+    case 'choose-source': r.innerHTML = step2HTML(); bindStep2(); break;
+    case 'recording': r.innerHTML = recordingHTML(); startRecording(); break;
+    case 'loading-video': r.innerHTML = loadingHTML(); bindLoading(); break;
+    case 'analyzing': r.innerHTML = analyzingHTML(); runAnalysis().catch(e=>{document.getElementById('aiLoadText').textContent='❌ '+e.message;}); break;
+    case 'result': r.innerHTML = resultHTML(); bindResult(); break;
+  }
+}
+
+function step1HTML() {
+  return `<div class="step-card">
+    <span class="step-num">${t('ai_step1')}</span>
+    <div class="opt-grid">
+      <div class="opt-btn" data-act="pitch">${t('ai_pitch')}</div>
+      <div class="opt-btn" data-act="swing">${t('ai_swing')}</div>
+    </div>
+    <p style="color:#94a3b8;font-size:12px;margin-top:14px;line-height:1.6">${t('ai_knee_hint')}</p>
+  </div>`;
+}
+function bindStep1() {
+  document.querySelectorAll('#aiRoot .opt-btn').forEach(el => {
+    el.onclick = () => {
+      AI.action = el.dataset.act;
+      AI.state = 'choose-source';
+      renderAIStep();
+    };
+  });
+}
+
+function step2HTML() {
+  const back = (act) => `<div class="opt-btn" data-act="${act}">${act==='record'?t('ai_record'):t('ai_upload')}</div>`;
+  return `<div class="step-card">
+    <span class="step-num">${t('ai_step2')}</span>
+    <div class="opt-grid">
+      <div class="opt-btn" data-act="record">${t('ai_record')}</div>
+      <div class="opt-btn" data-act="upload">${t('ai_upload')}</div>
+    </div>
+    <div style="margin-top:14px"><button class="opt-btn" style="background:transparent;border:none;color:#94a3b8;font-size:12px" id="aiBack1">← ${t('ai_back')}</button></div>
+  </div>`;
+}
+function bindStep2() {
+  document.querySelectorAll('#aiRoot .opt-btn[data-act]').forEach(el => {
+    el.onclick = () => {
+      if (el.dataset.act === 'record') {
+        AI.state = 'recording';
+        renderAIStep();
+      } else {
+        document.getElementById('aiPicker').click();
+      }
+    };
+  });
+  document.getElementById('aiBack1').onclick = () => { AI.state = 'choose-action'; renderAIStep(); };
+}
+
+function recordingHTML() {
+  return `<div class="step-card">
+    <span class="step-num"><span class="rec-dot"></span>${t('ai_recording')}</span>
+    <div class="vid-wrap"><video id="aiRecVid" autoplay playsinline muted></video></div>
+    <p style="text-align:center;color:#fbbf24;font-size:14px;margin-top:8px" id="aiCountdown">3</p>
+  </div>`;
+}
+
+function startRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast(t('ai_err_camera')+'no mediaDevices'); AI.state='choose-source'; renderAIStep(); return;
+  }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480}, audio:false})
+    .then(stream => {
+      _aiStream = stream;
+      const v = document.getElementById('aiRecVid');
+      v.srcObject = stream; v.muted = true; v.play();
+      _aiChunks = [];
+      _aiRecorder = new MediaRecorder(stream, {mimeType:'video/webm'});
+      _aiRecorder.ondataavailable = e => { if (e.data.size) _aiChunks.push(e.data); };
+      _aiRecorder.onstop = () => {
+        const blob = new Blob(_aiChunks, {type:'video/webm'});
+        if (AI.videoUrl) URL.revokeObjectURL(AI.videoUrl);
+        AI.videoUrl = URL.createObjectURL(blob);
+        stopAISteam();
+        AI.state = 'loading-video';
+        renderAIStep();
+      };
+      _aiRecorder.start();
+      let n = 3;
+      const cd = document.getElementById('aiCountdown');
+      const tick = () => {
+        n--;
+        if (cd) cd.textContent = n;
+        if (n > 0) setTimeout(tick, 1000);
+      };
+      setTimeout(tick, 1000);
+      setTimeout(() => { if (_aiRecorder && _aiRecorder.state==='recording') _aiRecorder.stop(); }, 3100);
+    })
+    .catch(err => {
+      toast(t('ai_err_camera')+err.message);
+      AI.state='choose-source';
+      renderAIStep();
+    });
+}
+
+function loadingHTML() {
+  return `<div class="step-card">
+    <span class="step-num">${t('ai_load_video')}</span>
+    <div class="vid-wrap"><video id="aiVid" playsinline></video></div>
+    <button class="opt-btn" style="background:#fbbf24;color:#1e1b4b;font-size:14px;margin-top:10px" id="aiGoAnalyze">${t('ai_pose_detect')} →</button>
+    <p style="color:#94a3b8;font-size:11px;margin-top:8px">${t('ai_using_mock')}</p>
+  </div>`;
+}
+function bindLoading() {
+  const v = document.getElementById('aiVid');
+  v.src = AI.videoUrl;
+  document.getElementById('aiGoAnalyze').onclick = () => { AI.state='analyzing'; renderAIStep(); };
+}
+
+function analyzingHTML() {
+  return `<div class="step-card">
+    <span class="step-num">⚙️ AI 教练工作中</span>
+    <div class="vid-wrap"><video id="aiQuietVid" playsinline muted></video></div>
+    <div class="progress"><div class="progress-bar" id="aiProgBar"></div></div>
+    <p id="aiLoadText" style="color:#fbbf24;font-size:13px;text-align:center;min-height:18px"></p>
+    <div class="frame-strip" id="aiStrip"></div>
+  </div>`;
+}
+
+function setProg(pct, text) {
+  const bar = document.getElementById('aiProgBar');
+  const lab = document.getElementById('aiLoadText');
+  if (bar) bar.style.width = Math.min(100, Math.max(0,pct))+ '%';
+  if (lab && text) lab.textContent = text;
+}
+
+async function runAnalysis() {
+  setProg(5, t('ai_load_video'));
+  const v = document.getElementById('aiQuietVid');
+  if (!v) return;
+  v.src = AI.videoUrl;
+  await new Promise(r => v.addEventListener('loadedmetadata', r, {once:true}));
+  await new Promise(r => v.addEventListener('canplay', r, {once:true}));
+  if (v.duration < 0.4) throw new Error(t('ai_err_too_short'));
+  setProg(15, t('ai_load_model'));
+  await ensureLandmarker();
+  setProg(35, t('ai_extract'));
+  const N = Math.min(20, Math.max(8, Math.floor(v.duration*8)));
+  // 在静音视频上抓帧
+  const canvas = document.createElement('canvas');
+  canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+  const ctx = canvas.getContext('2d');
+  AI.frames = [];
+  for (let i=0; i<N; i++) {
+    const tt = (i+0.5)/N * v.duration;
+    await seekVideo(v, tt);
+    ctx.drawImage(v, 0, 0);
+    const img = canvas.toDataURL('image/jpeg', 0.45);
+    AI.frames.push({t:tt, dataUrl:img});
+    setProg(35 + 25*i/N, `${t('ai_extract')} ${i+1}/${N}`);
+  }
+  // 抽帧渲染到 strip
+  const strip = document.getElementById('aiStrip');
+  if (strip) {
+    strip.innerHTML = AI.frames.map(f => `<img src="${f.dataUrl}"/>`).join('');
+  }
+  setProg(65, t('ai_pose_detect'));
+  // MediaPipe 跑每帧（在原始 video 元素上）
+  const poses = [];
+  for (let i=0; i<N; i++) {
+    const tt = (i+0.5)/N * v.duration;
+    await seekVideo(v, tt);
+    const lm = AI.landmarker.detectForVideo(v, tt*1000).landmarks[0] || null;
+    poses.push(lm);
+    setProg(65 + 25*i/N, `${t('ai_pose_detect')} ${i+1}/${N}`);
+  }
+  setProg(92, t('ai_calc_angle'));
+  AI.angles = poseSeriesToAngles(poses);
+  setProg(100, '✓');
+  await new Promise(r => setTimeout(r, 350));
+  AI.state = 'result';
+  renderAIStep();
+}
+
+function seekVideo(v, t) {
+  return new Promise(resolve => {
+    const onSeek = () => { v.removeEventListener('seeked', onSeek); resolve(); };
+    v.addEventListener('seeked', onSeek);
+    v.currentTime = t;
+    setTimeout(resolve, 1500);
+  });
+}
+
+function poseSeriesToAngles(poses) {
+  function mid(a,b){return {x:(a.x+b.x)/2, y:(a.y+b.y)/2};}
+  function ang(a, b, c) {
+    if (!a || !b || !c) return null;
+    const v1x = a.x-b.x, v1y = a.y-b.y;
+    const v2x = c.x-b.x, v2y = c.y-b.y;
+    const dot = v1x*v2x + v1y*v2y;
+    const m1 = Math.hypot(v1x,v1y), m2 = Math.hypot(v2x,v2y);
+    if (!m1||!m2) return null;
+    return Math.acos(Math.max(-1,Math.min(1, dot/(m1*m2)))) * 180/Math.PI;
+  }
+  function seg(a,b){return Math.atan2(b.y-a.y, b.x-a.x)*180/Math.PI;}
+  return poses.map(lm => {
+    if (!lm || lm.length < 25) return null;
+    const sh = lm[11], el = lm[13], wr = lm[15];
+    const rsh = lm[12], hp = lm[23], rhp = lm[24];
+    const elbowAngle = ang(sh, el, wr);
+    const shLine = sh && rsh ? seg(sh, rsh) : null;
+    const hpLine = hp && rhp ? seg(hp, rhp) : null;
+    const hipShoulderSep = (shLine!=null && hpLine!=null) ? Math.abs(shLine - hpLine) : null;
+    const sm = (sh && rsh) ? mid(sh, rsh) : null;
+    const hm = (hp && rhp) ? mid(hp, rhp) : null;
+    const trunkTilt = (sm && hm) ? Math.abs(Math.atan2(sm.x-hm.x, sm.y-hm.y) * 180/Math.PI) : null;
+    return { elbow: elbowAngle, hipShoulder: hipShoulderSep, trunkTilt };
+  });
+}
+
+function mockCoachEval(angles) {
+  const numFrames = angles.length;
+  const releaseIdx = Math.max(0, Math.floor(numFrames * 0.6) - 1);
+  const peakHSSepIdx = angles.reduce((bi, a, i) => (a && (a.hipShoulder||0) > (angles[bi]?.hipShoulder||0) ? i : bi), 0);
+  const elbowAtRelease = angles[releaseIdx]?.elbow ?? 0;
+  const elbowMax = Math.max(...angles.filter(a=>a).map(a=>a.elbow||0));
+  const hipShoulderPeak = Math.max(...angles.filter(a=>a).map(a=>a.hipShoulder||0));
+  const trunkPeak = Math.max(...angles.filter(a=>a).map(a=>a.trunkTilt||0));
+
+  let sE=50, sH=50, sT=50;
+  if (elbowAtRelease >= 170) sE=92; else if (elbowAtRelease >= 158) sE=82; else if (elbowAtRelease >= 140) sE=68; else if (elbowAtRelease >= 120) sE=55; else sE=40;
+  if (hipShoulderPeak >= 55) sH=92; else if (hipShoulderPeak >= 40) sH=80; else if (hipShoulderPeak >= 25) sH=65; else if (hipShoulderPeak >= 12) sH=50; else sH=38;
+  if (trunkPeak <= 6) sT=92; else if (trunkPeak <= 12) sT=82; else if (trunkPeak <= 20) sT=68; else if (trunkPeak <= 30) sT=55; else sT=42;
+  const overall = Math.round(0.4*sE + 0.4*sH + 0.2*sT);
+
+  const ZH = LANG==='zh';
+  const main = [];
+  if (sE < 70) main.push({
+    label: ZH?'肘关节伸展':'Elbow extension',
+    msg: ZH? `出手瞬间肘角 ${Math.round(elbowAtRelease)}°，离理想的近 180° 还有距离，这意味着你的球速可能还有提升空间。` : `At release your elbow angle was ${Math.round(elbowAtRelease)}°, short of the ~180° ideal — there's likely more velocity to unlock.`,
+    tips: ZH? [
+      '"投手墙"练习：右手扶墙，左手握住，模拟抬腿→出手，感受伸出最后那一刻的"掰开"感',
+      '每天 50 次"L 形慢放"：手肘抬到与肩同高，然后像影片慢动作一样向外展开',
+      '镜面训练：对镜子出手，确保出手瞬间你的肘部像一条直线，而不是弯的'
+    ] : [
+      'Wall drill: simulate the wind-up → release against a wall, feel the "snap" at extension',
+      '50 daily "L-shape slow releases": raise elbow to shoulder, then unfold like slow motion',
+      'Mirror practice: verify your elbow looks like a straight line — not bent — at release'
+    ]
+  });
+  if (sH < 70) main.push({
+    label: ZH?'髋肩分离':'Hip-shoulder separation',
+    msg: ZH? `动作里髋和肩的扭力分离只有 ${Math.round(hipShoulderPeak)}°（优秀投手 ≥55°），这是投球"弹簧"的关键。` : `Your peak hip-shoulder separation is ${Math.round(hipShoulderPeak)}° (elite pitchers hit ≥55°). This is the "spring" of pitching.`,
+    tips: ZH? [
+      '抬腿时多停一拍：让后脚（蹬地脚）用力蹬地，把髋"硬转"向本垒板方向',
+      '做"扭转木板"：站在厚书/平衡板上做投球，强制髋先于肩转动',
+      '录视频看：从侧面看，髋和肩两线最大夹角出现在"出手前"那一刻'
+    ] : [
+      'Pause at leg lift: drive the back hip toward home plate before the upper body rotates',
+      'Rotation board: pitch off a balance board — forces hips to lead the shoulders',
+      'Film side-on: measure the moment of max hip-shoulder angle right before release'
+    ]
+  });
+  if (sT < 70) main.push({
+    label: ZH?'躯干侧倾':'Trunk tilt',
+    msg: ZH? `动作中躯干最大侧倾 ${Math.round(trunkPeak)}°（理想 <10°），过多侧倾会损失能量传递。` : `Peak trunk tilt is ${Math.round(trunkPeak)}° (target <10°). Excess tilt leaks energy down the chain.`,
+    tips: ZH? [
+      '"核心棒"训练：把一根棒贴在背上，从髋到头顶，练习时保证棒不下落',
+      '强化腹斜肌：每周 3 次俄罗斯转体，每次 30 秒',
+      '出手瞬间收紧腹肌，而不是"倒过去"发力'
+    ] : [
+      '"Core stick" drills: a stick along your spine — head, hips should both touch it',
+      'Russian twists 3×/week to strengthen obliques',
+      '"Brace" your core at release — don\'t fall over sideways'
+    ]
+  });
+
+  const primary = main[0] || {
+    label: ZH?'整体动作':'Overall',
+    msg: ZH?'整体动作非常均衡，关节协调性好，继续保持。':'Your mechanics look balanced. Joint coordination is good — keep going.',
+    tips: ZH? [
+      '保持每场比赛 2-3 次录视频，每 2 周对比一次',
+      '赛前 5 分钟动态热身，重点激活髋、肩、核心',
+      '每次训练后花 2 分钟用 App 记一句话反思'
+    ] : [
+      'Record 2-3 videos per game; compare every 2 weeks',
+      '5-min dynamic warmup focusing on hip, shoulder, core',
+      'After every session, log a one-line reflection in the App'
+    ]
+  };
+  const secondary = main[1] || null;
+
+  const encourageList = ZH ? [
+    '科学的训练坚持 21 天就会变成肌肉记忆，你已经在做了！',
+    '每一球都比上一球更接近更好的自己，加油！',
+    '投球是科学，也是艺术 — 你两者都在学。',
+    '记住：未来的棒球名将，都在今天这一步开始。'
+  ] : [
+    '21 days of deliberate practice makes a habit — you\'re already on day 1!',
+    'Each pitch is closer to the best version of you.',
+    'Pitching is science AND art — you\'re learning both.',
+    'Future baseball stars all started exactly here.'
+  ];
+
+  return {
+    score: overall,
+    problem: primary,
+    secondary,
+    tips: primary.tips,
+    encourage: encourageList[Math.floor(Math.random() * encourageList.length)]
+  };
+}
+
+function resultHTML() {
+  const ev = mockCoachEval(AI.angles);
+  const ZH = LANG==='zh';
+  const angStrip = (vals, color) => {
+    if (!vals.length) return '';
+    const max = Math.max(...vals.map(v=>Math.abs(v||0)), 1);
+    const w = 100/vals.length;
+    return vals.map((v,i) => v==null ? `<div style="background:#475569;width:${w}%;height:100%;display:inline-block"></div>` : `<div style="background:${color};width:${w}%;height:${(Math.abs(v)/max)*100}%;display:inline-block;vertical-align:bottom" title="${v.toFixed(1)}°"></div>`).join('');
+  };
+  const svElbow = angStrip(AI.angles.map(a=>a&&a.elbow), '#fbbf24');
+  const svHS = angStrip(AI.angles.map(a=>a&&a.hipShoulder), '#a78bfa');
+  const svTrunk = angStrip(AI.angles.map(a=>a&&a.trunkTilt), '#34d399');
+  const isSwing = AI.action === 'swing';
+  const subHtml = ev.secondary ? `<div style="margin-top:10px;color:#fca5a5;padding:8px;background:#7f1d1d40;border-radius:6px;font-size:12px">📌 ${ev.secondary.msg}</div>` : '';
+  return `<div class="step-card">
+    <span class="step-num">${t('ai_title_result')}</span>
+    <div style="display:flex;align-items:center;gap:14px;margin:14px 0">
+      <span class="score" style="font-size:32px;background:#fbbf24;color:#1e1b4b;padding:6px 18px;border-radius:24px;font-weight:700">${ev.score}</span>
+      <div>
+        <div style="color:#cbd5e1;font-size:11px">${t('ai_overall_score')}</div>
+        <div style="color:#94a3b8;font-size:11px">${isSwing?ZH?'打击动作':'Batting':ZH?'投球动作':'Pitching'}</div>
+      </div>
+    </div>
+    <h4>${t('ai_metric_elbow')}</h4>
+    <div style="height:60px;background:#0f172a;border-radius:6px;padding:4px;display:flex;align-items:flex-end">${svElbow}</div>
+    <h4 style="margin-top:10px">${t('ai_metric_hipshoulder')}</h4>
+    <div style="height:60px;background:#0f172a;border-radius:6px;padding:4px;display:flex;align-items:flex-end">${svHS}</div>
+    <h4 style="margin-top:10px">${t('ai_metric_trunk')}</h4>
+    <div style="height:60px;background:#0f172a;border-radius:6px;padding:4px;display:flex;align-items:flex-end">${svTrunk}</div>
+    <div class="ai-report" style="margin-top:14px">
+      <h4>${t('ai_problem')}</h4>
+      <div class="problem">${ev.problem.msg}</div>
+      ${subHtml}
+      <h4 style="margin-top:14px">${t('ai_tips')}</h4>
+      ${ev.tips.map(t1 => `<div class="tip-row">${t1}</div>`).join('')}
+      <div class="encourage">${ev.encourage}</div>
+    </div>
+    <p style="color:#64748b;font-size:11px;margin-top:10px">${t('ai_using_mock')}</p>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="opt-btn" style="flex:1;background:#334155" id="aiRedo">${t('ai_back')}</button>
+      <button class="opt-btn" style="flex:1;background:#fbbf24;color:#1e1b4b;border:none" id="aiSave">${t('ai_save_review')}</button>
+    </div>
+  </div>`;
+}
+
+function bindResult() {
+  document.getElementById('aiRedo').onclick = () => {
+    if (AI.videoUrl) { URL.revokeObjectURL(AI.videoUrl); AI.videoUrl = null; }
+    AI.frames = null; AI.angles = null;
+    AI.state = 'choose-action';
+    renderAIStep();
+  };
+  document.getElementById('aiSave').onclick = () => {
+    const ev = mockCoachEval(AI.angles);
+    const ZH = LANG==='zh';
+    const r = {
+      date: new Date().toISOString().slice(0,10),
+      type: AI.action === 'swing' ? 'train' : 'train',  // 都是训练类（视频训练）
+      source: 'self',
+      keep: ZH ? `动作评分 ${ev.score}/100` : `Overall score ${ev.score}/100`,
+      improve: ev.problem.msg,
+      highlight: ev.encourage
+    };
+    DATA.reflections.unshift(r);
+    saveData(DATA);
+    const updated = mockCoachEval(AI.angles);
+    const tips = updated.tips.join(' / ');
+    DATA.reflections[0].improve += `\n💡 ${tips}`;
+    saveData(DATA);
+    toast('✓ ' + (ZH?'已保存到复盘':'Saved to reflections'));
+    closeAICoach();
+  };
+}
+
+// 在 renderReview 里绑 entry 按钮
+window.bindAIStartBtn = function() {
+  const b = document.getElementById('aiStartBtn');
+  if (b) b.onclick = openAICoach;
+};
 </script>
+
+<div id="aiModal">
+  <div class="top-bar">
+    <button class="x-btn" onclick="closeAICoach()">✕</button>
+    <h3>🤖 AI Video Coach <span class="pill" style="margin-left:8px;background:#7c3aed;color:#f5f3ff">v7 NEW</span></h3>
+  </div>
+  <div class="step-area" id="aiRoot"></div>
+  <input type="file" id="aiPicker" accept="video/*" style="display:none" onchange="pickFromAlbum(this.files[0])">
+</div>
 </body>
 </html>
