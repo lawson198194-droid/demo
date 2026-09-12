@@ -444,6 +444,24 @@ const I18N = {
   ai_close: { zh:'关闭', en:'Close' },
   ai_back: { zh:'返回', en:'Back' },
   ai_using_mock: { zh:'当前使用本地规则引擎（无需联网）', en:'Local rule-based engine (works offline)' },
+  ai_using_gemini: { zh:'🤖 正在调用 Gemini AI 教练', en:'🤖 Powered by Gemini AI Coach' },
+  ai_using_fallback: { zh:'⚠️ Gemini 调用失败，已自动切换本地引擎', en:'⚠️ Gemini failed, switched to local engine' },
+  ai_settings: { zh:'🤖 AI 教练设置', en:'🤖 AI Coach Settings' },
+  ai_settings_sub: { zh:'接入 Google Gemini 1.5 Flash，每次分析自动打分并生成针对性建议。免费层每天 1500 次。', en:'Hook up Google Gemini 1.5 Flash. Local compute only sends numeric angles, not videos. Free tier: 1500/day.' },
+  ai_enable: { zh:'启用 Gemini 真AI', en:'Enable Gemini AI' },
+  ai_apikey: { zh:'API Key（保存到本机浏览器）', en:'API Key (stored locally)' },
+  ai_getkey: { zh:'👉 在此免费申请（Google 账号）', en:'👉 Free signup (Google account)' },
+  ai_show: { zh:'显示', en:'Show' },
+  ai_hide: { zh:'隐藏', en:'Hide' },
+  ai_test: { zh:'🔌 测试连接', en:'🔌 Test connection' },
+  ai_test_ok: { zh:'✅ 连接成功！', en:'✅ Connected!' },
+  ai_test_fail: { zh:'❌ 连接失败：', en:'❌ Failed: ' },
+  ai_settings_saved: { zh:'✅ 已保存', en:'✅ Saved' },
+  ai_settings_need_key: { zh:'请先填写 API Key', en:'Please enter API Key first' },
+  ai_redo_gemini: { zh:'🔄 重新用 AI 分析', en:'🔄 Re-run with AI' },
+  ai_redo_mock: { zh:'🔄 重新用本地引擎', en:'🔄 Re-run with local engine' },
+  ai_eval_loading: { zh:'🧠 Gemini 思考中…', en:'🧠 Gemini thinking…' },
+  ai_eval_tip: { zh:'通常 1-3 秒', en:'Usually 1-3 seconds' },
   ai_knee_hint: { zh:'提示：让镜头能拍到完整上半身（头顶到胯部），光线充足。', en:'Tip: film full upper body (head to hips), good lighting.' },
   ai_err_no_pose: { zh:'未检测到人体，请让镜头拍到完整上半身', en:'No body detected. Show full upper body to the camera.' },
   ai_err_too_short: { zh:'视频太短（<0.5 秒）', en:'Video too short (<0.5s)' },
@@ -577,6 +595,7 @@ function loadData() {
 function saveData(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
 
 let DATA = loadData();
+loadGeminiConfig();
 let currentTab = 'home';
 let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:80, strike:70, mood:4, pitchCount:80, strikeout:0, hits:0, atBats:0, struckOut:0, note:'', location:null, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:'' };
 let bodyForm = { date: new Date().toISOString().slice(0,10), height:'', weight:'' };
@@ -1725,6 +1744,30 @@ function renderMe(s) {
         `).join('')}
       </div>`:''}
     </div>
+    <div class="card" style="background:linear-gradient(135deg,#faf5ff,#f3e8ff);border-color:#a855f7">
+      <h3 style="color:#6b21a8">${t('ai_settings')}</h3>
+      <div style="font-size:11px;color:#6b21a8;margin-bottom:10px;line-height:1.6">${t('ai_settings_sub')}</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
+          <input type="checkbox" id="gem_enabled" ${GEMINI.enabled?'checked':''} style="width:18px;height:18px;accent-color:#7c3aed;cursor:pointer">
+          <span style="font-size:13px;font-weight:600;color:#1f3a5f">${t('ai_enable')}</span>
+        </label>
+        <span id="gemStatus" class="pill" style="background:${GEMINI.enabled?(GEMINI.apiKey?'#14532d;color:#bbf7d0':'#7f1d1d;color:#fca5a5'):'#e5e7eb;color:#64748b'}">${GEMINI.enabled?(GEMINI.apiKey?(LANG==='zh'?'✓ 已启用':'✓ ON'):(LANG==='zh'?'需填 Key':'Need Key')):(LANG==='zh'?'未启用':'OFF')}</span>
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label>${t('ai_apikey')}</label>
+        <div style="display:flex;gap:6px">
+          <input type="password" id="gem_key" value="${GEMINI.apiKey}" placeholder="AIzaSy..." autocomplete="off" style="flex:1;font-family:monospace;font-size:12px">
+          <button type="button" id="gem_toggle_show" style="padding:9px 12px;background:#e5e7eb;color:#1f3a5f;border:none;border-radius:10px;font-size:12px;cursor:pointer">${t('ai_show')}</button>
+        </div>
+        <div style="font-size:10px;color:#7c3aed;margin-top:6px"><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#7c3aed;text-decoration:underline">${t('ai_getkey')}</a></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn" id="gem_save" style="flex:1;background:linear-gradient(135deg,#7c3aed,#a855f7)">💾 ${LANG==='zh'?'保存':'Save'}</button>
+        <button class="btn ghost" id="gem_test" style="flex:1">${t('ai_test')}</button>
+      </div>
+      <div id="gem_test_result" style="margin-top:10px;font-size:12px"></div>
+    </div>
     <div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
       <h3 style="color:#1e40af">${t('all_data')}</h3>
       <div style="font-size:12px;color:#475569;line-height:1.8">
@@ -1755,6 +1798,56 @@ function renderMe(s) {
   document.querySelectorAll('[data-del-body]').forEach(el=>{
     el.onclick = () => { if (confirm(t('yes')+'?')) { DATA.bodyLogs = DATA.bodyLogs.filter(r => r.id != el.dataset.delBody); saveData(DATA); render(); } };
   });
+  bindGeminiSettings();
+}
+
+// ===== v8: Gemini 教练设置卡 绑定 =====
+function bindGeminiSettings() {
+  const enEl = document.getElementById('gem_enabled');
+  if (!enEl) return;
+  enEl.onchange = e => {
+    GEMINI.enabled = e.target.checked;
+    saveGeminiConfig();
+    const st = document.getElementById('gemStatus');
+    if (st) {
+      st.textContent = GEMINI.enabled ? (GEMINI.apiKey ? (LANG==='zh'?'✓ 已启用':'✓ ON') : (LANG==='zh'?'需填 Key':'Need Key')) : (LANG==='zh'?'未启用':'OFF');
+      st.style.background = GEMINI.enabled ? (GEMINI.apiKey ? '#14532d' : '#7f1d1d') : '#e5e7eb';
+      st.style.color = GEMINI.enabled ? (GEMINI.apiKey ? '#bbf7d0' : '#fca5a5') : '#64748b';
+    }
+    toast(t('ai_settings_saved'));
+  };
+  const keyEl = document.getElementById('gem_key');
+  if (keyEl) keyEl.oninput = e => { GEMINI.apiKey = e.target.value.trim(); saveGeminiConfig(); };
+  const tgl = document.getElementById('gem_toggle_show');
+  if (tgl) tgl.onclick = () => {
+    const inp = document.getElementById('gem_key');
+    if (!inp) return;
+    const showing = inp.type === 'text';
+    inp.type = showing ? 'password' : 'text';
+    tgl.textContent = showing ? t('ai_show') : t('ai_hide');
+  };
+  const sv = document.getElementById('gem_save');
+  if (sv) sv.onclick = () => {
+    saveGeminiConfig();
+    toast(t('ai_settings_saved'));
+  };
+  const ts = document.getElementById('gem_test');
+  const rs = document.getElementById('gem_test_result');
+  if (ts) ts.onclick = async () => {
+    if (!GEMINI.apiKey) { if (rs) rs.innerHTML = `<span style="color:#dc2626">${t('ai_settings_need_key')}</span>`; return; }
+    if (rs) rs.innerHTML = `<span style="color:#7c3aed">⏳ ...</span>`;
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI.model}:generateContent?key=${encodeURIComponent(GEMINI.apiKey)}`;
+      const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({contents:[{role:'user',parts:[{text:'Reply OK'}]}]}) });
+      if (!r.ok) {
+        const t1 = await r.text().catch(()=>'');
+        throw new Error('HTTP '+r.status+': '+(t1.slice(0,100)||r.statusText));
+      }
+      if (rs) rs.innerHTML = `<span style="color:#16a34a">${t('ai_test_ok')} (${GEMINI.model})</span>`;
+    } catch(e) {
+      if (rs) rs.innerHTML = `<span style="color:#dc2626">${t('ai_test_fail')}${e.message}</span>`;
+    }
+  };
 }
 
 function go(tab) { currentTab = tab; render(); }
@@ -1818,6 +1911,7 @@ function renderAIStep() {
     case 'recording': r.innerHTML = recordingHTML(); startRecording(); break;
     case 'loading-video': r.innerHTML = loadingHTML(); bindLoading(); break;
     case 'analyzing': r.innerHTML = analyzingHTML(); runAnalysis().catch(e=>{document.getElementById('aiLoadText').textContent='❌ '+e.message;}); break;
+    case 'ai-eval': r.innerHTML = aiEvalHTML(); runAIEval(); break;
     case 'result': r.innerHTML = resultHTML(); bindResult(); break;
   }
 }
@@ -2121,8 +2215,121 @@ function mockCoachEval(angles) {
   };
 }
 
+// ===== v8 Gemini AI 集成 =====
+const GEMINI = { enabled:false, apiKey:'', model:'gemini-1.5-flash-latest', lastSource:'mock' };
+function loadGeminiConfig() {
+  try {
+    const s = JSON.parse(localStorage.getItem('gemini_config_v1')||'{}');
+    if (typeof s.enabled === 'boolean') GEMINI.enabled = s.enabled;
+    if (typeof s.apiKey === 'string') GEMINI.apiKey = s.apiKey;
+    if (typeof s.model === 'string' && s.model) GEMINI.model = s.model;
+  } catch(e) {}
+}
+function saveGeminiConfig() {
+  try { localStorage.setItem('gemini_config_v1', JSON.stringify({enabled:GEMINI.enabled, apiKey:GEMINI.apiKey, model:GEMINI.model})); } catch(e) {}
+}
+async function callGeminiCoach(action, angles, fallback) {
+  if (!GEMINI.enabled || !GEMINI.apiKey) throw new Error(LANG==='zh'?'AI 教练未启用':'AI Coach not enabled');
+  const numFrames = angles.length;
+  const releaseIdx = Math.max(0, Math.floor(numFrames * 0.6) - 1);
+  const elbowAtRelease = +(angles[releaseIdx]?.elbow ?? 0).toFixed(1);
+  const elbowMax = +Math.max(...angles.filter(a=>a).map(a=>a.elbow||0)).toFixed(1);
+  const hipShoulderPeak = +Math.max(...angles.filter(a=>a).map(a=>a.hipShoulder||0)).toFixed(1);
+  const trunkPeak = +Math.max(...angles.filter(a=>a).map(a=>a.trunkTilt||0)).toFixed(1);
+  const ZH = LANG==='zh';
+  const actionName = action==='swing' ? (ZH?'打击':'batting') : (ZH?'投球':'pitching');
+  const sysPrompt = ZH ?
+    `你是12岁香港女孩莀安的棒球姐姐教练。她正在练${actionName}。`+
+    `你的反馈要：温柔但严格，可执行，不用医学术语，不滥用"加油"。`+
+    `严格按JSON格式输出，不要任何额外文字、Markdown或代码块标记。` :
+    `You are a baseball coach for 12-year-old Chan An from Hong Kong, working on ${actionName}. `+
+    `Tone: warm but firm, actionable, no jargon. Output strict JSON only, no extra text or markdown fences.`;
+  const userPrompt = ZH ?
+    `我从视频中提取了 ${numFrames} 帧姿态数据，关键指标如下：\n`+
+    `- 出手瞬间肘角: ${elbowAtRelease}°  (理想 ~180°)\n`+
+    `- 全程最大肘角: ${elbowMax}°\n`+
+    `- 髋肩最大分离角: ${hipShoulderPeak}°  (优秀投手 ≥55°)\n`+
+    `- 躯干最大侧倾: ${trunkPeak}°  (理想 <10°)\n\n`+
+    `请严格按以下 JSON 输出（不要任何其他文字，不要 Markdown）：\n`+
+    `{\n`+
+    `  "score": <0-100 整数>,\n`+
+    `  "problem": "<30字以内中文，指出最需改进的环节>",\n`+
+    `  "secondary": "<20字以内中文，次要问题；如无填空串>",\n`+
+    `  "tips": ["<具体练习1>", "<具体练习2>", "<具体练习3>"],\n`+
+    `  "encourage": "<20字以内中文温暖鼓励话，不要套话>"\n`+
+    `}` :
+    `I extracted ${numFrames} frames of pose data. Key metrics:\n`+
+    `- Elbow at release: ${elbowAtRelease}°\n`+
+    `- Max elbow: ${elbowMax}°\n`+
+    `- Peak hip-shoulder separation: ${hipShoulderPeak}°\n`+
+    `- Peak trunk tilt: ${trunkPeak}°\n\n`+
+    `Output STRICT JSON only (no markdown fences, no extra text):\n`+
+    `{\n`+
+    `  "score": <int 0-100>,\n`+
+    `  "problem": "<key issue, ≤30 chars>",\n`+
+    `  "secondary": "<2nd issue, ≤25 chars; empty string if none>",\n`+
+    `  "tips": ["<tip1>", "<tip2>", "<tip3>"],\n`+
+    `  "encourage": "<≤20 words warm encouragement, no cliches>"\n`+
+    `}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI.model}:generateContent?key=${encodeURIComponent(GEMINI.apiKey)}`;
+  const body = {
+    contents: [{ role:'user', parts:[{ text: userPrompt }] }],
+    systemInstruction: { parts:[{ text: sysPrompt }] },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 500, responseMimeType: 'application/json' }
+  };
+  const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (!resp.ok) {
+    const errTxt = await resp.text().catch(()=>'');
+    throw new Error('HTTP '+resp.status+': '+(errTxt.slice(0,150)||resp.statusText));
+  }
+  const data = await resp.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const json = text.trim().replace(/^```json\s*/i,'').replace(/```$/,'').trim();
+  let parsed;
+  try { parsed = JSON.parse(json); }
+  catch(e) {
+    const m = json.match(/\{[\s\S]*\}/);
+    if (m) { try { parsed = JSON.parse(m[0]); } catch(e2) { throw new Error('JSON 解析失败: '+text.slice(0,80)); } }
+    else throw new Error('JSON 解析失败: '+text.slice(0,80));
+  }
+  return {
+    score: Math.max(0, Math.min(100, Math.round(+parsed.score || fallback.score))),
+    problem: { label: fallback.problem.label, msg: String(parsed.problem||fallback.problem.msg) },
+    secondary: parsed.secondary ? { label: fallback.secondary?.label || '', msg: String(parsed.secondary) } : null,
+    tips: Array.isArray(parsed.tips) && parsed.tips.length===3 ? parsed.tips.map(s=>String(s)) : fallback.tips,
+    encourage: String(parsed.encourage||fallback.encourage)
+  };
+}
+
+function aiEvalHTML() {
+  return `<div class="step-card">
+    <span class="step-num">${t('ai_using_gemini')}</span>
+    <div style="text-align:center;padding:30px 10px">
+      <div style="font-size:48px;animation:aiBlink 1.5s infinite">🧠</div>
+      <div style="color:#cbd5e1;font-size:13px;margin-top:14px">${t('ai_eval_loading')}</div>
+      <div style="color:#64748b;font-size:11px;margin-top:6px">${GEMINI.model}</div>
+    </div>
+  </div>`;
+}
+
+async function runAIEval() {
+  try {
+    const out = await callGeminiCoach(AI.action, AI.angles, AI.fallbackEval);
+    AI.feedback = out;
+    AI.feedbackSource = 'gemini';
+    AI.state = 'result';
+  } catch(e) {
+    AI.feedback = AI.fallbackEval;
+    AI.feedbackSource = 'mock-fallback';
+    AI.state = 'result';
+    setTimeout(()=> toast('⚠️ Gemini: '+e.message, 4000), 300);
+  }
+  renderAIStep();
+}
+
 function resultHTML() {
-  const ev = mockCoachEval(AI.angles);
+  AI.feedback = AI.feedback || mockCoachEval(AI.angles);
+  const ev = AI.feedback;
   const ZH = LANG==='zh';
   const angStrip = (vals, color) => {
     if (!vals.length) return '';
@@ -2135,8 +2342,19 @@ function resultHTML() {
   const svTrunk = angStrip(AI.angles.map(a=>a&&a.trunkTilt), '#34d399');
   const isSwing = AI.action === 'swing';
   const subHtml = ev.secondary ? `<div style="margin-top:10px;color:#fca5a5;padding:8px;background:#7f1d1d40;border-radius:6px;font-size:12px">📌 ${ev.secondary.msg}</div>` : '';
+  const sourceBanner = AI.feedbackSource==='gemini'
+    ? `<div style="background:linear-gradient(90deg,#7c3aed,#a855f7);color:#fff;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:10px"><b>${t('ai_using_gemini')}</b></div>`
+    : AI.feedbackSource==='mock-fallback'
+      ? `<div style="background:#7f1d1d;color:#fca5a5;padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:10px">${t('ai_using_fallback')}</div>`
+      : `<p style="color:#64748b;font-size:11px;margin-top:10px">${t('ai_using_mock')}</p>`;
+  const redoBtn = GEMINI.enabled && GEMINI.apiKey
+    ? `<button class="opt-btn" style="flex:1;background:#7c3aed;color:#fff" id="aiRedoAI">${t('ai_redo_gemini')}</button>`
+    : (AI.feedbackSource==='gemini' || AI.feedbackSource==='mock-fallback'
+       ? `<button class="opt-btn" style="flex:1;background:#334155" id="aiRedoMock">${t('ai_redo_mock')}</button>`
+       : '');
   return `<div class="step-card">
     <span class="step-num">${t('ai_title_result')}</span>
+    ${sourceBanner}
     <div style="display:flex;align-items:center;gap:14px;margin:14px 0">
       <span class="score" style="font-size:32px;background:#fbbf24;color:#1e1b4b;padding:6px 18px;border-radius:24px;font-weight:700">${ev.score}</span>
       <div>
@@ -2158,9 +2376,9 @@ function resultHTML() {
       ${ev.tips.map(t1 => `<div class="tip-row">${t1}</div>`).join('')}
       <div class="encourage">${ev.encourage}</div>
     </div>
-    <p style="color:#64748b;font-size:11px;margin-top:10px">${t('ai_using_mock')}</p>
     <div style="display:flex;gap:10px;margin-top:14px">
       <button class="opt-btn" style="flex:1;background:#334155" id="aiRedo">${t('ai_back')}</button>
+      ${redoBtn}
       <button class="opt-btn" style="flex:1;background:#fbbf24;color:#1e1b4b;border:none" id="aiSave">${t('ai_save_review')}</button>
     </div>
   </div>`;
@@ -2169,25 +2387,43 @@ function resultHTML() {
 function bindResult() {
   document.getElementById('aiRedo').onclick = () => {
     if (AI.videoUrl) { URL.revokeObjectURL(AI.videoUrl); AI.videoUrl = null; }
-    AI.frames = null; AI.angles = null;
+    AI.frames = null; AI.angles = null; AI.feedback = null; AI.fallbackEval = null;
     AI.state = 'choose-action';
     renderAIStep();
   };
+  const redoAI = document.getElementById('aiRedoAI');
+  if (redoAI) {
+    redoAI.onclick = () => {
+      if (!GEMINI.enabled || !GEMINI.apiKey) { toast(t('ai_settings_need_key')); return; }
+      AI.feedback = null;
+      AI.state = 'ai-eval';
+      renderAIStep();
+    };
+  }
+  const redoMock = document.getElementById('aiRedoMock');
+  if (redoMock) {
+    redoMock.onclick = () => {
+      AI.feedback = mockCoachEval(AI.angles);
+      AI.feedbackSource = 'mock';
+      AI.state = 'result';
+      renderAIStep();
+    };
+  }
   document.getElementById('aiSave').onclick = () => {
-    const ev = mockCoachEval(AI.angles);
+    const ev = AI.feedback || mockCoachEval(AI.angles);
     const ZH = LANG==='zh';
+    const srcTag = AI.feedbackSource==='gemini' ? '🤖 Gemini' : '📐 本地';
     const r = {
       date: new Date().toISOString().slice(0,10),
-      type: AI.action === 'swing' ? 'train' : 'train',  // 都是训练类（视频训练）
+      type: AI.action === 'swing' ? 'train' : 'train',
       source: 'self',
-      keep: ZH ? `动作评分 ${ev.score}/100` : `Overall score ${ev.score}/100`,
+      keep: `${srcTag} · ${ZH ? '动作评分' : 'Score'} ${ev.score}/100`,
       improve: ev.problem.msg,
       highlight: ev.encourage
     };
     DATA.reflections.unshift(r);
     saveData(DATA);
-    const updated = mockCoachEval(AI.angles);
-    const tips = updated.tips.join(' / ');
+    const tips = ev.tips.join(' / ');
     DATA.reflections[0].improve += `\n💡 ${tips}`;
     saveData(DATA);
     toast('✓ ' + (ZH?'已保存到复盘':'Saved to reflections'));
