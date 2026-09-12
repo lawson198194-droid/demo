@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Baseball Growth Coach · 莀安 Demo v9.0 (语音zh-CN+本周累计+拍摄tips)</title>
+<title>Baseball Growth Coach · 莀安 Demo v9.1 (投球快计日期+保存弹窗+语音修复)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -277,6 +277,13 @@
       <div class="modal-stat"><div class="v" id="sessionStrikePct">0%</div><div class="l" id="lblStrikePct">好球率</div></div>
     </div>
     <div class="field">
+      <label id="pmLblDate" style="display:flex;justify-content:space-between;align-items:center">
+        <span>${t('pm_date')}</span>
+        <button type="button" id="pmDateToday" style="background:#dbeafe;color:#1e40af;border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer">${LANG==='zh'?'📅 今天':'📅 Today'}</button>
+      </label>
+      <input type="date" id="pm_date" max="">
+    </div>
+    <div class="field">
       <label id="lblPitchSpeed">球速 (km/h)</label>
       <input type="number" id="pm_speed" min="50" max="120" placeholder="${LANG==='zh'?'如：80（可空）':'e.g. 80 (optional)'}">
     </div>
@@ -296,6 +303,23 @@
     <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn ghost" onclick="undoPitch()" style="font-size:13px;padding:11px">↶ <span id="lblUndo">撤销</span></button>
       <button class="btn" id="savePitch" style="font-size:13px;padding:11px">✓ <span id="lblSaveSession">保存会话</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- v9.1：保存完毕确认弹窗 -->
+<div class="modal-mask" id="successModal" style="align-items:center;justify-content:center">
+  <div class="modal-content" onclick="event.stopPropagation()" style="border-radius:24px;max-width:340px;padding:24px 22px;text-align:center">
+    <div style="font-size:48px;line-height:1;margin-bottom:8px">🎉</div>
+    <h2 id="successTitleText" style="color:#16a34a;margin:0 0 16px;font-size:22px">✓ 保存完毕</h2>
+    <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:14px;padding:14px;margin-bottom:14px">
+      <div id="successRow1" style="font-size:14px;color:#166534;line-height:1.6;margin-bottom:6px"></div>
+      <div id="successRow2" style="font-size:14px;color:#166534;line-height:1.6;margin-bottom:6px"></div>
+      <div id="successRow3" style="font-size:13px;color:#15803d;line-height:1.5;font-weight:600"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn ghost" id="successViewLog" style="flex:1;font-size:13px">📋 <span id="lblSuccessViewLog">查看历史</span></button>
+      <button class="btn" id="successClose" style="flex:1;font-size:14px">✓ <span id="lblSuccessClose">好的</span></button>
     </div>
   </div>
 </div>
@@ -545,6 +569,14 @@ const I18N = {
   lbl_ball_zone: { zh:'坏球区（外圈 16 格）', en:'Ball zone (outer 16)' },
   lbl_undo: { zh:'撤销', en:'Undo' }, lbl_save_session: { zh:'✓ 保存为训练记录', en:'✓ Save as Training' },
   pm_pitch_summary: { zh:'📋 本场汇总（可留空）', en:'📋 Session summary (optional)' },
+  // v9.1：日期选项 + 保存完成弹窗
+  pm_date: { zh:'训练日期（可改、补录历史）', en:'Session date (editable, backfill)' },
+  success_title: { zh:'✓ 保存完毕', en:'✓ Saved' },
+  success_pitch: { zh:'本次投了', en:'You threw' },
+  success_week: { zh:'本周累计', en:'This week total' },
+  success_log: { zh:'已记录到训练日志', en:'Logged to training history' },
+  success_view_log: { zh:'查看历史', en:'View log' },
+  success_close: { zh:'好的', en:'Got it' },
   pm_pitcher_hits: { zh:'被安打数', en:'Hits Allowed' },
   pm_pitcher_strikeout: { zh:'投出三振数', en:'Strikeouts Thrown' },
   pm_pitcher_hits_ph: { zh:'如：3（可空）', en:'e.g. 3 (optional)' },
@@ -770,11 +802,30 @@ function openPitchModal() {
   document.getElementById('pm_speed').value = '';
   document.getElementById('pm_pitcherHits').value = '';
   document.getElementById('pm_pitcherSO').value = '';
+  // v9.1：日期初始化为今天 + 绑定"今天"按钮 + 保存按钮（之前漏绑定！这是为什么罗哥说没反应）
+  const today = new Date().toISOString().slice(0,10);
+  const dateEl = document.getElementById('pm_date');
+  if (dateEl) { dateEl.value = today; dateEl.max = today; }
+  const todayBtn = document.getElementById('pmDateToday');
+  if (todayBtn) todayBtn.onclick = () => { dateEl.value = today; };
+  const saveBtn = document.getElementById('savePitch');
+  if (saveBtn) saveBtn.onclick = savePitchSession;
   updateSessionStats();
   document.getElementById('pitchModal').classList.add('show');
 }
 function closeModal(id) {
   document.getElementById(id).classList.remove('show');
+}
+// v9.1：保存完毕弹窗按钮事件
+function bindSuccessModal() {
+  const close = document.getElementById('successClose');
+  if (close) close.onclick = () => closeModal('successModal');
+  const view = document.getElementById('successViewLog');
+  if (view) view.onclick = () => {
+    closeModal('successModal');
+    currentTab = 'log';
+    if (typeof render === 'function') render();
+  };
 }
 function renderPitchGrid() {
   const counts = {};
@@ -815,9 +866,11 @@ function undoPitch() {
 }
 function savePitchSession() {
   if (!pitchSession.entries.length) { toast(LANG==='zh'?'没有投球可保存':'No pitches to save'); return; }
-  const today = new Date().toISOString().slice(0,10);
+  // v9.1：日期允许修改（补录历史），默认今天
+  const dateEl = document.getElementById('pm_date');
+  const dateStr = (dateEl && dateEl.value) ? dateEl.value : new Date().toISOString().slice(0,10);
   // 1) 写单球 → DATA.pitches[]（驱动 9 宫格热点图 + AI 战术分析）
-  const newRows = pitchSession.entries.map(e => ({ date: today, speed: e.speed, location: e.location, isStrike: e.isStrike, source:'self' }));
+  const newRows = pitchSession.entries.map(e => ({ date: dateStr, speed: e.speed, location: e.location, isStrike: e.isStrike, source:'self' }));
   DATA.pitches.push(...newRows);
   // 2) 同步建一条训练日志 → DATA.logs[]（驱动总投球数 + 训练趋势）
   const n = newRows.length;
@@ -828,14 +881,14 @@ function savePitchSession() {
   const soThrown = document.getElementById('pm_pitcherSO').value;
   const logEntry = {
     id: Date.now(),
-    date: today,
+    date: dateStr,
     type: 'train',
     source: 'self',
     pitchCount: n,
     strike: pct,
     speed: avgSpeed,
     mood: 4,
-    note: '⚾ 投球快计自动记录'
+    note: `⚾ 投球快计自动记录（${dateStr}）`
   };
   // 可空字段：有填才写入
   if (hitsAllowed !== '') logEntry.hits = +hitsAllowed;        // 投手被安打数（与莀安本人安打共用 hits 字段）
@@ -843,10 +896,14 @@ function savePitchSession() {
   if (hitsAllowed !== '' || soThrown !== '') logEntry.note += ` · 被安打 ${hitsAllowed || 0} · 投出三振 ${soThrown || 0}`;
   DATA.logs.push(logEntry);
   saveData(DATA);
-  // v9.0：明确反馈 — 保存即「一次训练」+ 显示本周累计球数
+  // v9.1：弹 modal 取代 toast — 明确告诉罗哥「保存完毕 + 显示在哪里」
   const weekTotal = pitchesThisWeek();
-  toast(`✓ ${LANG==='zh'?'已记为训练':'Saved as training'} · ${n}${LANG==='zh'?'球':'p'} · ${LANG==='zh'?'本周累计':'week total'} ${weekTotal}${LANG==='zh'?'球':'p'}`);
+  const _zh = LANG === 'zh';
+  document.getElementById('successRow1').innerHTML = `📅 <b>${dateStr}</b> · ${t('success_pitch')} <b style="color:#0f172e;font-size:18px">${n}</b> ${_zh?'球':' pitches'} (${_zh?'好球率':'strike'} <b>${pct}%</b>)`;
+  document.getElementById('successRow2').innerHTML = `📊 ${t('success_week')} <b style="color:#0f172e;font-size:18px">${weekTotal}</b> ${_zh?'球':' pitches'}`;
+  document.getElementById('successRow3').innerHTML = `✓ ${t('success_log')}`;
   closeModal('pitchModal');
+  document.getElementById('successModal').classList.add('show');
   render();
 }
 
@@ -2001,6 +2058,7 @@ function renderMe(s) {
     render();
   };
   bindLLMSettings();
+  bindSuccessModal();
 }
 
 // ===== v8: LLM 多 provider 设置卡 绑定 =====
