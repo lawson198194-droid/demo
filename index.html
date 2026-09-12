@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Baseball Growth Coach · 莀安 Demo v6</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body {
+    font-family: -apple-system, "PingFang TC", "Microsoft YaHei", system-ui, sans-serif;
+    background: linear-gradient(135deg,#f4f7fb 0%,#e8eef7 100%);
+    min-height:100vh; display:flex; justify-content:center; align-items:center;
+    padding:20px 0; color:#1f3a5f;
+  }
+  .desktop-hint { position:fixed; top:14px; left:14px; color:#7a8aa1; font-size:12px; background:rgba(255,255,255,.7); padding:6px 10px; border-radius:8px; backdrop-filter:blur(6px); z-index:50; }
+  .lang-switch { position:fixed; top:14px; right:14px; z-index:50; background:rgba(255,255,255,.85); backdrop-filter:blur(6px); border:1px solid #e5e7eb; border-radius:10px; padding:4px; display:flex; gap:2px; font-size:12px; font-weight:600; }
+  .lang-switch button { border:none; background:transparent; padding:5px 10px; border-radius:7px; color:#7a8aa1; cursor:pointer; font-weight:600; }
+  .lang-switch button.on { background:#1f3a5f; color:#fff; }
+
+  .phone { width:375px; height:812px; background:#fff; border-radius:48px; box-shadow: 0 30px 60px rgba(31,58,95,.25), 0 0 0 12px #1f2937, 0 0 0 14px #4b5563; overflow:hidden; position:relative; display:flex; flex-direction:column; }
+  .notch { position:absolute; top:0; left:50%; transform:translateX(-50%); width:160px; height:30px; background:#1f2937; border-radius:0 0 18px 18px; z-index:100; }
+  .status-bar { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 28px; font-size:13px; font-weight:600; color:#1f2937; }
+  .screen { flex:1; overflow-y:auto; padding:14px 18px 80px; -webkit-overflow-scrolling:touch; }
+  .screen::-webkit-scrollbar { display:none; }
+  .tab-bar { position:absolute; bottom:0; left:0; right:0; height:74px; background:#fff; border-top:1px solid #e5e7eb; display:flex; padding-bottom:18px; }
+  .tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:10px; color:#94a3b8; cursor:pointer; transition:color .2s; }
+  .tab.active { color:#1f3a5f; }
+  .tab svg { width:20px; height:20px; }
+  .h-screen { font-size:22px; font-weight:800; letter-spacing:-.5px; color:#1f3a5f; margin:8px 0 4px; }
+  .sub-screen { font-size:12px; color:#7a8aa1; margin-bottom:14px; }
+  .card { background:linear-gradient(135deg,#ffffff 0%,#f8fafc 100%); border:1px solid #e5e7eb; border-radius:18px; padding:14px; margin-bottom:12px; box-shadow:0 2px 6px rgba(31,58,95,.04); }
+  .card h3 { font-size:13px; color:#7a8aa1; font-weight:600; margin-bottom:8px; letter-spacing:.3px; }
+  .badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:600; margin:2px 4px 2px 0; }
+  .badge.ok { background:#d1fae5; color:#065f46; }
+  .badge.lock { background:#f1f5f9; color:#94a3b8; }
+  .badge.gold { background:linear-gradient(135deg,#fef3c7,#fde68a); color:#92400e; }
+  .badge.win { background:linear-gradient(135deg,#d1fae5,#a7f3d0); color:#065f46; }
+  .badge.loss { background:linear-gradient(135deg,#fee2e2,#fecaca); color:#991b1b; }
+  .badge.draw { background:linear-gradient(135deg,#e0e7ff,#c7d2fe); color:#3730a3; }
+  .avatar-area { display:flex; align-items:center; gap:14px; padding:6px 4px; }
+  .avatar { width:84px; height:84px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:38px; background:linear-gradient(135deg,#1f3a5f,#3b82f6); box-shadow:0 6px 14px rgba(31,58,95,.3); transition:all .4s; }
+  .avatar.level-1 { background:linear-gradient(135deg,#94a3b8,#cbd5e1); }
+  .avatar.level-2 { background:linear-gradient(135deg,#1e3a8a,#3b82f6); }
+  .avatar.level-3 { background:linear-gradient(135deg,#7c3aed,#c084fc); }
+  .avatar.level-4 { background:linear-gradient(135deg,#b45309,#fbbf24); }
+  .avatar.level-5 { background:linear-gradient(135deg,#dc2626,#fbbf24); box-shadow:0 6px 20px rgba(220,38,38,.4); }
+  .avatar-info { flex:1; }
+  .avatar-info .name { font-size:15px; font-weight:700; color:#1f3a5f; }
+  .avatar-info .title { font-size:11px; color:#7a8aa1; margin-top:2px; }
+  .level-bar { height:6px; background:#e5e7eb; border-radius:3px; margin-top:8px; overflow:hidden; }
+  .level-fill { height:100%; background:linear-gradient(90deg,#3b82f6,#fbbf24); border-radius:3px; transition:width .6s; }
+  .stat-row { display:flex; gap:8px; margin-bottom:12px; }
+  .stat { flex:1; background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:10px 6px; text-align:center; }
+  .stat .v { font-size:18px; font-weight:800; color:#1f3a5f; }
+  .stat .l { font-size:9.5px; color:#7a8aa1; margin-top:2px; letter-spacing:.3px; }
+  .stat.energy .v { color:#dc2626; }
+  .stat.mood .v { color:#7c3aed; }
+  .stat.bat .v { color:#16a34a; }
+  .stat.body .v { color:#0891b2; }
+  .field { margin-bottom:10px; }
+  .field label { display:block; font-size:11px; color:#7a8aa1; margin-bottom:4px; font-weight:600; }
+  .field input, .field select, .field textarea { width:100%; padding:9px 12px; border:1px solid #e5e7eb; border-radius:10px; font-size:14px; color:#1f3a5f; font-family:inherit; background:#fff; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline:none; border-color:#3b82f6; }
+  .field textarea { resize:none; height:54px; }
+  .seg { display:flex; gap:6px; }
+  .seg-item { flex:1; text-align:center; padding:7px 4px; border:1px solid #e5e7eb; border-radius:8px; font-size:12px; cursor:pointer; transition:all .2s; background:#fff; }
+  .seg-item.on { background:#1f3a5f; color:#fff; border-color:#1f3a5f; }
+  .btn { width:100%; padding:13px; background:linear-gradient(135deg,#1f3a5f,#3b82f6); color:#fff; border:none; border-radius:12px; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(31,58,95,.3); transition:transform .1s; }
+  .btn:active { transform:scale(.98); }
+  .btn.ghost { background:#f1f5f9; color:#1f3a5f; box-shadow:none; }
+  .btn.warn { background:linear-gradient(135deg,#7c3aed,#c084fc); }
+  .btn.mic { background:linear-gradient(135deg,#dc2626,#ef4444); box-shadow:0 4px 14px rgba(220,38,38,.4); }
+  .btn.mic.recording { background:linear-gradient(135deg,#dc2626,#fbbf24); animation:pulse 1.2s ease-in-out infinite; }
+  .btn.mic.mini { padding:6px 10px; font-size:11px; width:auto; }
+  @keyframes pulse { 0%,100% { box-shadow:0 4px 14px rgba(220,38,38,.4);} 50%{box-shadow:0 4px 24px rgba(220,38,38,.8);} }
+  .log-item { display:flex; gap:10px; padding:10px; border-radius:12px; margin-bottom:8px; background:#f8fafc; align-items:center; }
+  .log-date { font-size:10px; color:#7a8aa1; min-width:46px; }
+  .log-info { flex:1; }
+  .log-info .top { font-size:13px; font-weight:700; color:#1f3a5f; }
+  .log-info .bot { font-size:11px; color:#7a8aa1; margin-top:2px; }
+  .log-speed { font-size:18px; font-weight:800; color:#dc2626; }
+  .empty { text-align:center; padding:30px 10px; color:#94a3b8; font-size:12px; }
+  .chart-wrap { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:12px; margin-bottom:10px; }
+  .chart-title { font-size:12px; font-weight:700; color:#1f3a5f; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+  .legend { display:flex; gap:10px; font-size:10px; color:#7a8aa1; flex-wrap:wrap; }
+  .lg-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+  .review-card { background:linear-gradient(135deg,#1f3a5f,#3b82f6); color:#fff; border-radius:16px; padding:16px; }
+  .review-card h3 { color:#fff; font-size:14px; margin-bottom:10px; }
+  .review-quote { font-size:13px; line-height:1.7; color:#e0e7ff; font-style:italic; }
+  .toast { position:absolute; top:60px; left:50%; transform:translateX(-50%); background:rgba(31,58,95,.95); color:#fff; padding:10px 16px; border-radius:10px; font-size:12px; z-index:200; opacity:0; transition:opacity .3s; max-width:80%; text-align:center; }
+  .toast.show { opacity:1; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  .profile-row { display:flex; align-items:center; gap:10px; padding:6px 0; }
+  .profile-row .lbl { font-size:12px; color:#7a8aa1; min-width:64px; }
+  .pill { display:inline-block; padding:3px 8px; background:#dbeafe; color:#1e40af; border-radius:6px; font-size:11px; font-weight:600; margin-right:4px; }
+  .section-title { font-size:11px; font-weight:700; color:#1f3a5f; letter-spacing:.5px; margin:14px 0 6px; text-transform:uppercase; }
+  .delete-x { color:#ef4444; font-size:18px; cursor:pointer; padding:0 4px; line-height:1; }
+  .loc-pill { display:inline-flex; align-items:center; gap:4px; background:#dbeafe; color:#1e40af; border-radius:999px; padding:3px 9px; font-size:11px; font-weight:600; margin-top:6px; }
+  .loc-pill .x { color:#94a3b8; cursor:pointer; font-size:13px; }
+  .src-pill { font-size:10px; padding:2px 6px; border-radius:6px; font-weight:600; }
+  .src-pill.self { background:#dbeafe; color:#1e40af; }
+  .src-pill.coach { background:#fef3c7; color:#92400e; }
+  .src-pill.parent { background:#fce7f3; color:#9d174d; }
+  .match-only { display:none; }
+  .match-only.show { display:block; }
+
+  /* 反思专用样式 */
+  .reflect-q { background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:10px; margin-bottom:10px; }
+  .reflect-q .q-label { font-size:12px; font-weight:700; color:#1f3a5f; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+  .reflect-q textarea { font-size:13px; height:50px; }
+  .reflect-item { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:10px; margin-bottom:8px; }
+  .reflect-item .ri-head { display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#7a8aa1; margin-bottom:6px; }
+  .reflect-item .ri-row { font-size:12px; line-height:1.6; margin-bottom:4px; }
+  .reflect-item .ri-row b { color:#1f3a5f; }
+  .kw-cloud { display:flex; flex-wrap:wrap; gap:6px; }
+  .kw { background:#fef3c7; color:#92400e; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:600; }
+  .kw.keep { background:#d1fae5; color:#065f46; }
+  .kw.improve { background:#fee2e2; color:#991b1b; }
+  .kw.highlight { background:#dbeafe; color:#1e40af; }
+  .kw .c { color:#7a8aa1; font-weight:400; margin-left:3px; font-size:10px; }
+
+  /* ============ v6 新增：9宫格、弹层、球数预警 ============ */
+  .pitch-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:3px; max-width:280px; margin:8px auto; }
+  .pitch-cell { aspect-ratio:1; border:1.5px solid #cbd5e1; border-radius:6px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; color:#7a8aa1; font-weight:700; position:relative; transition:transform .1s; }
+  .pitch-cell:active { transform:scale(.95); }
+  .pitch-cell.strike { border-color:#16a34a; border-width:2px; background:#f0fdf4; }
+  .pitch-cell.ball { border-color:#dc2626; border-width:2px; background:#fef2f2; }
+  .pitch-cell.hit-strike { background:#16a34a; color:#fff; border-color:#16a34a; }
+  .pitch-cell.hit-ball { background:#dc2626; color:#fff; border-color:#dc2626; }
+  .pitch-cell .cnt { position:absolute; top:2px; right:3px; font-size:9px; background:rgba(255,255,255,.7); padding:0 3px; border-radius:3px; }
+  .pitch-cell .pos { font-size:8px; color:#94a3b8; position:absolute; bottom:1px; left:3px; }
+  .pitch-grid-caption { display:flex; justify-content:space-between; font-size:9px; color:#94a3b8; max-width:280px; margin:0 auto 2px; padding:0 4px; }
+  .legend-9 { font-size:10px; color:#7a8aa1; text-align:center; margin-top:4px; max-width:280px; margin-left:auto; margin-right:auto; }
+
+  /* 弹层 */
+  .modal-mask { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.5); z-index:300; display:none; align-items:flex-end; justify-content:center; }
+  .modal-mask.show { display:flex; }
+  .modal-content { background:#fff; width:100%; border-radius:24px 24px 0 0; padding:18px; max-height:78%; overflow-y:auto; animation:slideUp .3s; }
+  @keyframes slideUp { from { transform:translateY(100%);} to { transform:translateY(0);} }
+  .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .modal-header h2 { font-size:17px; font-weight:800; color:#1f3a5f; }
+  .modal-close { font-size:24px; color:#94a3b8; cursor:pointer; padding:0 4px; }
+  .modal-stats { display:flex; gap:8px; margin-bottom:12px; }
+  .modal-stat { flex:1; background:#f8fafc; border-radius:10px; padding:8px; text-align:center; }
+  .modal-stat .v { font-size:18px; font-weight:800; color:#1f3a5f; }
+  .modal-stat .l { font-size:10px; color:#7a8aa1; }
+
+  /* 球数预警 */
+  .warning-card { background:linear-gradient(135deg,#fee2e2,#fecaca); border-color:#dc2626; }
+  .warning-card.ok { background:linear-gradient(135deg,#d1fae5,#a7f3d0); border-color:#16a34a; }
+  .warning-card.mid { background:linear-gradient(135deg,#fef3c7,#fde68a); border-color:#f59e0b; }
+  .warning-bar { height:8px; background:#fff; border-radius:4px; overflow:hidden; margin-top:6px; }
+  .warning-bar .fill { height:100%; background:linear-gradient(90deg,#16a34a,#fbbf24,#dc2626); transition:width .4s; }
+
+  /* CSV 预览表格 */
+  .csv-preview { background:#0f172a; color:#e2e8f0; border-radius:10px; padding:10px; font-family:Menlo,Monaco,monospace; font-size:10px; max-height:200px; overflow:auto; margin-top:8px; line-height:1.5; }
+  .csv-preview .ok { color:#4ade80; }
+  .csv-preview .err { color:#f87171; }
+
+  /* 设备数据 logo 标签 */
+  .device-pill { display:inline-flex; align-items:center; gap:4px; background:#fce7f3; color:#9d174d; border-radius:999px; padding:3px 9px; font-size:10px; font-weight:700; }
+
+  @media print {
+    body { background:#fff; padding:0; display:block; }
+    .desktop-hint, .lang-switch, .phone, .tab-bar, .toast { display:none !important; }
+    #printReport { display:block !important; }
+    @page { size:A4; margin:14mm; }
+  }
+  #printReport { display:none; padding:0; color:#1f2937; }
+  #printReport h1 { font-size:26px; color:#1f3a5f; margin-bottom:4px; }
+  #printReport .sub { color:#64748b; font-size:12px; margin-bottom:18px; }
+  #printReport .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  #printReport .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:14px; }
+  #printReport .box { border:1px solid #e5e7eb; border-radius:10px; padding:12px; background:#f8fafc; }
+  #printReport .box .lbl { font-size:11px; color:#64748b; }
+  #printReport .box .v { font-size:22px; font-weight:800; color:#1f3a5f; margin-top:2px; }
+  #printReport h2 { font-size:14px; color:#1f3a5f; margin:14px 0 6px; border-bottom:2px solid #1f3a5f; padding-bottom:4px; }
+  #printReport table { width:100%; border-collapse:collapse; font-size:11px; margin-bottom:10px; }
+  #printReport th { background:#1f3a5f; color:#fff; padding:6px 8px; text-align:left; }
+  #printReport td { padding:5px 8px; border-bottom:1px solid #e5e7eb; }
+  #printReport .footer { margin-top:18px; font-size:10px; color:#94a3b8; text-align:center; border-top:1px solid #e5e7eb; padding-top:8px; }
+  #printReport svg { width:100%; height:auto; }
+</style>
+</head>
+<body>
+<div class="desktop-hint">💡 数据自动保存到本机 · 在 Mac/iPhone 打开体验最佳</div>
+<div class="lang-switch">
+  <button id="langZh" class="on" onclick="setLang('zh')">中</button>
+  <button id="langEn" onclick="setLang('en')">EN</button>
+</div>
+
+<div class="phone">
+  <div class="notch"></div>
+  <div class="status-bar">
+    <span id="clk">9:41</span>
+    <span>📶 🔋</span>
+  </div>
+
+  <div class="screen" id="screen"></div>
+
+  <div class="tab-bar">
+    <div class="tab active" data-tab="home" onclick="go('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12L12 3l9 9M5 10v10h14V10"/></svg>
+      <span data-t="tab_home">成长</span>
+    </div>
+    <div class="tab" data-tab="log" onclick="go('log')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z M8 8h8M8 12h8M8 16h5"/></svg>
+      <span data-t="tab_log">日志</span>
+    </div>
+    <div class="tab" data-tab="chart" onclick="go('chart')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/></svg>
+      <span data-t="tab_chart">曲线</span>
+    </div>
+    <div class="tab" data-tab="review" onclick="go('review')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
+      <span data-t="tab_review">复盘</span>
+    </div>
+    <div class="tab" data-tab="me" onclick="go('me')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>
+      <span data-t="tab_me">我</span>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<!-- 弹层：投球快记 9宫格 -->
+<div class="modal-mask" id="pitchModal">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="pitchModalTitle">⚾ 投一次球</h2>
+      <span class="modal-close" onclick="closeModal('pitchModal')">×</span>
+    </div>
+    <div class="modal-stats">
+      <div class="modal-stat"><div class="v" id="sessionTotal">0</div><div class="l" id="lblTotal">已投</div></div>
+      <div class="modal-stat"><div class="v" id="sessionStrike" style="color:#16a34a">0</div><div class="l" id="lblStrike">好球</div></div>
+      <div class="modal-stat"><div class="v" id="sessionBall" style="color:#dc2626">0</div><div class="l" id="lblBall">坏球</div></div>
+      <div class="modal-stat"><div class="v" id="sessionStrikePct">0%</div><div class="l" id="lblStrikePct">好球率</div></div>
+    </div>
+    <div class="field">
+      <label id="lblPitchSpeed">球速 (km/h)</label>
+      <input type="number" id="pm_speed" min="50" max="120" value="80">
+    </div>
+    <div class="pitch-grid-caption">
+      <span id="lblCatcherView">捕手视角（投球目标）</span>
+    </div>
+    <div class="pitch-grid" id="pitchGrid"></div>
+    <div class="legend-9">
+      <span style="color:#16a34a">■</span> <span id="lblStrikeZone">好球区（中间 9 格）</span> ·
+      <span style="color:#dc2626">■</span> <span id="lblBallZone">坏球区（外圈 16 格）</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn ghost" onclick="undoPitch()" style="font-size:13px;padding:11px">↶ <span id="lblUndo">撤销</span></button>
+      <button class="btn" id="savePitch" style="font-size:13px;padding:11px">✓ <span id="lblSaveSession">保存会话</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- 弹层：CSV 导入 -->
+<div class="modal-mask" id="csvModal">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>📁 <span id="csvModalTitle">设备数据导入</span></h2>
+      <span class="modal-close" onclick="closeModal('csvModal')">×</span>
+    </div>
+    <p style="font-size:12px;color:#475569;margin-bottom:10px" id="csvHelp">
+      选择 Rapsodo 或 Blast Motion 导出的 CSV 文件，本机会在本地解析（不上传任何数据）。
+      也可粘贴 CSV 文本直接测试。
+    </p>
+    <div class="field">
+      <label>📂 <span id="lblChooseFile">选择文件</span>（<span id="lblOr">或</span> <span id="lblPaste">粘贴文本</span>）</label>
+      <input type="file" id="csvFile" accept=".csv,.txt">
+    </div>
+    <div class="field">
+      <label id="lblPasteOr">粘贴 CSV 文本</label>
+      <textarea id="csvText" placeholder="pitch_id,date,time,speed_mph,spin_rpm,break_in,strike
+1,2026-09-10,15:30,52.4,2318,-3.2,1
+2,2026-09-10,15:30,51.8,2290,-2.8,0" style="height:110px;font-family:Menlo,monospace;font-size:11px"></textarea>
+    </div>
+    <button class="btn ghost" id="parseCsv" style="font-size:12px;padding:10px;margin-bottom:10px">🔍 <span id="lblParse">解析预览</span></button>
+    <div class="csv-preview" id="csvPreview" style="display:none"></div>
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="btn ghost" onclick="loadCsvSample('rapsodo')" style="font-size:11px;padding:9px">🧪 Rapsodo 样例</button>
+      <button class="btn ghost" onclick="loadCsvSample('blast')" style="font-size:11px;padding:9px">🧪 Blast 样例</button>
+      <button class="btn" id="importCsv" style="font-size:12px;padding:10px;display:none">✓ <span id="lblImport">导入</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="printReport"></div>
+
+<script>
+const KEY = 'baseball_growth_coach_v6';
+let LANG = localStorage.getItem('bgc_lang') || 'zh';
+
+// 9宫格位置编号（0-24，5x5）
+// 中间 3x3 = 6,7,8,11,12,13,16,17,18 = strike zone
+// 其他 16 个 = ball zone
+const STRIKE_ZONES = new Set([6,7,8,11,12,13,16,17,18]);
+function isStrike(idx) { return STRIKE_ZONES.has(idx); }
+
+const I18N = {
+  tab_home: { zh:'成长', en:'Home' }, tab_log: { zh:'日志', en:'Log' }, tab_chart: { zh:'曲线', en:'Charts' }, tab_review: { zh:'复盘', en:'Review' }, tab_me: { zh:'我', en:'Me' },
+  save: { zh:'保存记录', en:'Save Record' }, reset: { zh:'重置为示例数据', en:'Reset to Sample Data' }, yes: { zh:'确定', en:'OK' }, cancel: { zh:'取消', en:'Cancel' },
+  empty: { zh:'还没有数据', en:'No data yet' }, years: { zh:'岁', en:'yr' },
+  home_title: { zh:'成长中心', en:'Growth Hub' },
+  badges: { zh:'🏅 里程碑徽章', en:'🏅 Milestone Badges' },
+  b1: { zh:'⚡ 破 80 km/h', en:'⚡ Break 80 km/h' }, b2: { zh:'🔥 破 82 km/h', en:'🔥 Break 82 km/h' }, b3: { zh:'👑 破 85 km/h', en:'⚡ 85 km/h' },
+  b4: { zh:'💪 信心之星', en:'💪 Confidence Star' }, b5: { zh:'🥇 打击 5 成', en:'🥇 Batting .500' }, b6: { zh:'📒 记录 10+', en:'📒 10+ Logs' },
+  b7: { zh:'🎂 12 岁', en:'🎂 12 yrs' }, b8: { zh:'⚡ 投出 10 三振', en:'⚡ 10 Strikeouts Thrown' }, b9: { zh:'🛡 5 胜场', en:'🛡 5 Wins' },
+  last_log: { zh:'📈 最近一次', en:'📈 Last Entry' },
+  log_title: { zh:'训练 / 比赛日志', en:'Training / Match Log' }, log_sub: { zh:'所有数据保存在本机', en:'All data saved on this device' },
+  add_new: { zh:'添加新记录', en:'Add New Entry' }, date: { zh:'日期', en:'Date' }, type: { zh:'类型', en:'Type' },
+  train: { zh:'训练', en:'Train' }, match: { zh:'比赛', en:'Match' },
+  source: { zh:'数据来源', en:'Logged By' },
+  src_self: { zh:'🙋 我', en:'🙋 Self' }, src_coach: { zh:'🧢 教练', en:'🧢 Coach' }, src_parent: { zh:'👨‍👩‍👧 父母', en:'👨‍👩‍👧 Parent' },
+  pitch_section: { zh:'📌 投球', en:'📌 Pitch' }, speed: { zh:'球速 (km/h)', en:'Speed (km/h)' }, pitch_count: { zh:'投球数', en:'Pitches' },
+  strike_rate: { zh:'好球率 (%)', en:'Strike Rate (%)' }, strikeout: { zh:'投出三振', en:'Strikeouts Thrown' },
+  bat_section: { zh:'🏏 打击（可选）', en:'🏏 Batting (optional)' }, hits: { zh:'安打', en:'Hits' }, at_bats: { zh:'打数', en:'At-Bats' }, struck_out: { zh:'被三振', en:'Times Struck Out' },
+  mood: { zh:'信心 (1-5)', en:'Confidence (1-5)' }, note: { zh:'备注', en:'Note' }, note_ph: { zh:'今天投球怎样？或者🎤按住说话', en:"How was today? Or 🎤 hold to talk" },
+  loc_btn: { zh:'📍 自动定位球场', en:'📍 Auto-detect field' }, loc_no: { zh:'浏览器不支持定位', en:'Geolocation not supported' },
+  loc_denied: { zh:'定位被拒绝，可手动填', en:'Permission denied' }, loc_fail: { zh:'定位失败，重试', en:'Failed, retry' }, loc_ok: { zh:'✓ 已定位', en:'✓ Located' },
+  history: { zh:'历史记录', en:'History' },
+  match_section: { zh:'🏆 比赛详情', en:'🏆 Match Details' }, opponent: { zh:'对手', en:'Opponent' }, score: { zh:'比分', en:'Score' },
+  result: { zh:'结果', en:'Result' }, win: { zh:'胜', en:'Win' }, loss: { zh:'负', en:'Loss' }, draw: { zh:'平', en:'Draw' },
+  venue: { zh:'场地', en:'Venue' }, venue_ph: { zh:'球场名（GPS 自动填）', en:'Field name (GPS auto)' },
+  mic_idle: { zh:'🎤 按住说话', en:'🎤 Hold to talk' }, mic_rec: { zh:'🔴 正在听... 松开结束', en:'🔴 Listening... release to stop' },
+  mic_done: { zh:'✓ 识别完成', en:'✓ Recognized' }, mic_no: { zh:'浏览器不支持语音', en:'Speech not supported' }, mic_deny: { zh:'麦克风被拒绝', en:'Mic denied' },
+  chart_title: { zh:'成长双曲线', en:'Growth Curves' }, chart_sub: { zh:'技术 · 信心 · 身体 一起看', en:'Skill · Confidence · Body' },
+  c1: { zh:'📊 球速 + 信心', en:'📊 Speed + Confidence' }, c2: { zh:'🏏 打击率 + 投球数', en:'🏏 Batting + Pitches' },
+  c3: { zh:'📐 身高 & 体重', en:'📐 Height & Weight' }, c4: { zh:'⚡ 三振累计', en:'⚡ Strikeouts' },
+  c5: { zh:'🎯 9 宫格热点图（好球 + 坏球）', en:'🎯 9-Zone Heatmap (Strikes + Balls)' },
+  c6: { zh:'⚾ Rapsodo 转速 / 偏移', en:'⚾ Rapsodo Spin / Break' },
+  c_need2: { zh:'记录 ≥ 2 条后画曲线', en:'Need ≥ 2 entries' }, c_need_body: { zh:'在「我」→ 记录身体数据后画曲线', en:'Add body data in Me tab' },
+  c_need9: { zh:'用「⚾ 投球快记」记录 ≥ 1 次后画热点图', en:'Use Quick Pitch to log ≥ 1 session' },
+  legend_speed: { zh:'球速', en:'Speed' }, legend_mood: { zh:'信心', en:'Conf.' }, legend_bat: { zh:'打击', en:'Bat' },
+  legend_pitch: { zh:'投球', en:'Pitch' }, legend_height: { zh:'身高', en:'Height' }, legend_weight: { zh:'体重', en:'Weight' },
+  legend_so: { zh:'投出三振', en:'Strikeouts' },
+  rev_title: { zh:'复盘', en:'Review' }, rev_sub: { zh:'让数据告诉你，明天该练什么', en:"Let data tell you what to train tomorrow" },
+  rev_weekly: { zh:'📝 本周复盘', en:'📝 This Week' },
+  reflect_title: { zh:'📝 三问反思', en:'📝 3-Question Reflection' },
+  reflect_sub: { zh:'说完话，自动存，AI 帮汇总', en:'Speak, auto-save, AI summarizes' },
+  q_keep: { zh:'✅ 哪些要保持？', en:'✅ What to keep doing?' },
+  q_improve: { zh:'⚠️ 哪些要马上改进？', en:'⚠️ What to improve now?' },
+  q_highlight: { zh:'⭐ 最大的亮点？', en:'⭐ Biggest highlight?' },
+  reflect_add: { zh:'+ 新增一次反思', en:'+ Add a reflection' },
+  reflect_save: { zh:'保存反思', en:'Save Reflection' },
+  reflect_recent: { zh:'📚 历史反思', en:'📚 History' },
+  reflect_empty: { zh:'还没有反思。点 + 新增一次', en:'No reflections yet. Tap + to add one.' },
+  reflect_kw: { zh:'📊 关键词汇总（最近 10 次）', en:'📊 Keyword Summary (last 10)' },
+  reflect_kw_empty: { zh:'反思不足 3 次，汇总不显示', en:'Need ≥ 3 reflections' },
+  reflect_train: { zh:'训练', en:'Train' }, reflect_match: { zh:'比赛', en:'Match' },
+  rev_avg: { zh:'最近 {n} 次记录，平均球速 <b>{s} km/h</b>，平均信心 <b>{m}/5</b>', en:'Last {n} · avg speed <b>{s} km/h</b> · avg conf. <b>{m}/5</b>' },
+  rev_avg_bat: { zh:'，平均打击 <b>{b}</b>', en:' · avg batting <b>{b}</b>' },
+  rev_pitch: { zh:'共投出 <b>{n}</b> 球。', en:'Total pitches: <b>{n}</b>.' }, rev_so: { zh:'累计投出 <b>{n}</b> 次三振。', en:'Total strikeouts thrown: <b>{n}</b>.' },
+  rev_tags: { zh:'亮点：', en:'Highlights: ' }, rev_keep: { zh:'继续记录，曲线会告诉你答案。', en:"Keep logging — the curves will tell you." },
+  rev_breathe: { zh:'建议：技术可以练，信心也要练。给自己录一段投球视频回看。', en:'Tip: train skill, train confidence. Film one pitch and review.' },
+  rev_ontrack: { zh:'你正走在对的路上 — 保持节拍。', en:"You're on the right track — keep the rhythm." },
+  rev_tomorrow: { zh:'🎯 明日建议', en:'🎯 Tomorrow' },
+  t1: { zh:'· 重点练「稳定性」，好球率 70% 是关键', en:'· Focus on control — 70% strikes is the key' },
+  t2: { zh:'· 球速已稳 80，下一步目标 82 — 练爆发力', en:'· Speed steady at 80, next target 82 — train power' },
+  t3: { zh:'· 82+ 已稳定，可练变化球（曲球、滑球）拉开维度', en:'· 82+ steady, try breaking balls (curve / slider)' },
+  t4: { zh:'· 打击还没稳，30 个打击 T 座训练', en:'· Batting not steady — 30 swings off the tee' },
+  t5: { zh:'· 打击稳了，攻变化球路', en:'· Batting steady — work on pitch selection' },
+  t6: { zh:'· 投完一组 20 球，记下信心和球速，看双曲线变化', en:'· After 20 pitches, log speed + conf., watch the dual curve' },
+  t7: { zh:'· 本周投球过多，休息一天再练 — 投手伤肩不是小事', en:'· Heavy week — rest one day. Pitcher\'s elbow is real.' },
+  me_title: { zh:'我', en:'Me' }, me_sub: { zh:'个人信息 · 身体数据 · 设置', en:'Profile · Body · Settings' },
+  me_profile: { zh:'👤 个人信息', en:'👤 Profile' }, name: { zh:'姓名', en:'Name' }, title: { zh:'身份', en:'Title' },
+  birth: { zh:'生日', en:'Birthday' }, fill_birth: { zh:'填生日后自动算年龄', en:'Add birthday to auto-calc age' },
+  me_body: { zh:'📐 身体数据', en:'📐 Body Data' }, add_body: { zh:'记录一次', en:'Log Once' },
+  height: { zh:'身高 (cm)', en:'Height (cm)' }, weight: { zh:'体重 (kg)', en:'Weight (kg)' },
+  no_body: { zh:'还没有身体数据', en:'No body data yet' }, body_hist: { zh:'历史（最近 5 次）', en:'History (last 5)' },
+  all_data: { zh:'📊 我的全部数据', en:'📊 My Data' },
+  n_train: { zh:'训练/比赛记录', en:'Training/match logs' }, n_body: { zh:'身体数据', en:'Body records' },
+  n_pitch: { zh:'单球记录', en:'Pitches tracked' }, n_dev: { zh:'设备数据', en:'Device records' },
+  earliest: { zh:'最早记录', en:'Earliest' }, streak: { zh:'坚持天数', en:'Streak (days)' },
+  export_section: { zh:'📤 数据导出（发明展准备）', en:'📤 Export (for Geneva)' },
+  export_sub: { zh:'导出 CSV / JSON，可直接展示或分析', en:'Export CSV / JSON for the Geneva booth' },
+  exp_csv: { zh:'📥 下载 CSV 数据', en:'📥 Download CSV' }, exp_pdf: { zh:'📄 导出成长报告 PDF', en:'📄 Export Growth Report PDF' },
+  exp_json: { zh:'🗂 下载 JSON 备份', en:'🗂 Download JSON' },
+  review_q: { zh:'"{s} km/h 的球速正在生长，{b} 的打击也在变稳。最重要的是，最近的 {c} 颗星告诉我：你已经开始相信自己了。明天，把这一份相信自己带到球场。"', en:'"{s} km/h is growing. {b} batting is steadier. The {c}-star confidence says: you\'re starting to believe yourself. Bring that to the field tomorrow."' },
+  pr_title: { zh:'个人成长报告', en:'Personal Growth Report' }, pr_sub: { zh:'Baseball Growth Coach · 为日内瓦发明展准备', en:'Baseball Growth Coach · Geneva Inventions Team' },
+  pr_basic: { zh:'基本数据', en:'Quick Facts' }, pr_speed: { zh:'当前球速', en:'Current Speed' }, pr_conf: { zh:'平均信心', en:'Avg Confidence' },
+  pr_bat: { zh:'平均打击', en:'Avg Batting' }, pr_total_p: { zh:'累计投球', en:'Total Pitches' }, pr_total_so: { zh:'累计三振', en:'Total Strikeouts' },
+  pr_logs: { zh:'训练/比赛记录', en:'Logs' }, pr_ages: { zh:'年龄', en:'Age' }, pr_height: { zh:'身高', en:'Height' }, pr_weight: { zh:'体重', en:'Weight' }, pr_bmi: { zh:'BMI', en:'BMI' },
+  pr_curve: { zh:'成长曲线', en:'Growth Curves' }, pr_milestone: { zh:'里程碑', en:'Milestones' }, pr_table: { zh:'训练/比赛明细', en:'Training / Match Detail' },
+  pr_review: { zh:'本周复盘', en:'This Week' }, pr_foot: { zh:'由 Baseball Growth Coach 生成 · Powered by Ellie\'s data', en:"Generated by Baseball Growth Coach · Powered by Ellie's data" },
+  pr_reflect: { zh:'结构化反思（最近 5 次）', en:'Structured Reflection (last 5)' },
+  pr_pitch: { zh:'最近 9 宫格热点图', en:'Recent 9-Zone Heatmap' },
+  pr_dev: { zh:'设备数据接入（CSV）', en:'Device Data (CSV)' },
+
+  // v6 新增
+  quick_pitch: { zh:'⚾ 投球快记（9 宫格）', en:'⚾ Quick Pitch (9-Zone)' },
+  quick_pitch_sub: { zh:'点格子 → 投一球。本会话内可撤销。', en:'Tap a zone → log one pitch. Undo within session.' },
+  import_csv_btn: { zh:'📁 导入设备数据 (CSV)', en:'📁 Import Device CSV' },
+  pitch_modal_title: { zh:'⚾ 投一次球', en:'⚾ Log One Pitch' },
+  lbl_total: { zh:'已投', en:'Thrown' }, lbl_strike: { zh:'好球', en:'Strike' }, lbl_ball: { zh:'坏球', en:'Ball' }, lbl_strike_pct: { zh:'好球率', en:'Strike %' },
+  lbl_catcher_view: { zh:'捕手视角（投球目标）', en:"Catcher's view (target zone)" },
+  lbl_strike_zone: { zh:'好球区（中间 9 格）', en:'Strike zone (middle 9)' },
+  lbl_ball_zone: { zh:'坏球区（外圈 16 格）', en:'Ball zone (outer 16)' },
+  lbl_undo: { zh:'撤销', en:'Undo' }, lbl_save_session: { zh:'保存会话', en:'Save Session' },
+  csv_modal_title: { zh:'设备数据导入', en:'Device CSV Import' },
+  csv_help: { zh:'选择 Rapsodo 或 Blast Motion 导出的 CSV，本机本地解析（不上传）。也可粘贴 CSV 直接测试。', en:'Pick Rapsodo or Blast Motion CSV — parsed locally. You can also paste CSV.' },
+  lbl_choose_file: { zh:'选择文件', en:'Choose file' },
+  lbl_paste_or: { zh:'粘贴 CSV 文本（或上方按钮加载样例）', en:'Paste CSV text (or load a sample above)' },
+  lbl_parse: { zh:'解析预览', en:'Parse Preview' },
+  lbl_import: { zh:'导入', en:'Import' },
+  lbl_or: { zh:'或', en:'or' }, lbl_paste: { zh:'粘贴文本', en:'paste text' },
+  warn_title: { zh:'⚠️ 球数预警', en:'⚠️ Pitch Count Alert' },
+  warn_ok: { zh:'✓ 本周投球安全', en:'✓ Weekly pitch count safe' },
+  warn_mid: { zh:'⚠ 本周投球较多，注意休息', en:'⚠ Heavy week — take care' },
+  warn_high: { zh:'🚨 已超过周上限，请立即休息', en:'🚨 Over weekly limit — rest now' },
+  warn_sub: { zh:'本周已投 <b>{n}</b> 球，周建议上限 <b>{max}</b>', en:'This week: <b>{n}</b> pitches · weekly cap <b>{max}</b>' },
+  warn_sub_high: { zh:'超上限 <b>{over}</b> 球。建议连续休 2-3 天避免投手肘。', en:'Over by <b>{over}</b> pitches. Rest 2-3 days to avoid pitcher\'s elbow.' },
+  warn_limit_10_12: { zh:'10-12 岁投手周上限', en:'Weekly limit (age 10-12)' },
+  warn_limit_13_15: { zh:'13-15 岁投手周上限', en:'Weekly limit (age 13-15)' },
+  warn_8u: { zh:'8 岁以下投手周上限', en:'Weekly limit (under 8)' },
+};
+function t(key, vars) {
+  let s = (I18N[key] && I18N[key][LANG]) || key;
+  if (vars) for (const k in vars) s = s.replaceAll('{'+k+'}', vars[k]);
+  return s;
+}
+function setLang(l) {
+  LANG = l; localStorage.setItem('bgc_lang', l);
+  document.getElementById('langZh').classList.toggle('on', l==='zh');
+  document.getElementById('langEn').classList.toggle('on', l==='en');
+  document.documentElement.lang = (l==='zh'?'zh-HK':'en');
+  applyI18n(); render();
+}
+function applyI18n() {
+  document.querySelectorAll('[data-t]').forEach(el => el.textContent = t(el.dataset.t));
+  // 弹层里的标签
+  const pmTitle = document.getElementById('pitchModalTitle');
+  if (pmTitle) pmTitle.textContent = t('pitch_modal_title');
+  const csvTitle = document.getElementById('csvModalTitle');
+  if (csvTitle) csvTitle.textContent = t('csv_modal_title');
+  const helpEl = document.getElementById('csvHelp');
+  if (helpEl) helpEl.textContent = t('csv_help');
+}
+
+function loadData() {
+  const raw = localStorage.getItem(KEY);
+  if (raw) {
+    const d = JSON.parse(raw);
+    d.logs = (d.logs || []).map(l => ({ source:'self', strikeout:0, struckOut:0, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:'', ...l }));
+    d.reflections = d.reflections || [];
+    d.bodyLogs = d.bodyLogs || [];
+    d.pitches = d.pitches || [];   // 单球记录
+    d.deviceLogs = d.deviceLogs || [];   // CSV 导入的设备数据
+    return d;
+  }
+  const seed = {
+    profile: { name:'Ellie', title:'Hong Kong U12 Pitcher', birthdate:'2014-11-15', initialHeight:null, initialWeight:null },
+    logs: [
+      {id:1, date:'2026-08-25', type:'train', source:'self', speed:78, strike:62, mood:3, pitchCount:60, hits:1, atBats:4, strikeout:2, struckOut:1, note:'投球不稳', location:null, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:''},
+      {id:2, date:'2026-08-27', type:'train', source:'coach', speed:79, strike:65, mood:4, pitchCount:75, hits:2, atBats:5, strikeout:3, struckOut:0, note:'教练说动作更稳了', location:null, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:''},
+      {id:3, date:'2026-08-29', type:'match', source:'parent', speed:80, strike:68, mood:4, pitchCount:90, hits:2, atBats:5, strikeout:4, struckOut:1, note:'联赛对台北', location:{lat:22.3027,lng:114.1772,name:'Kowloon Park'}, opponent:'台北聯隊', scoreSelf:8, scoreOpp:5, result:'win', venue:'九龍公園球場'},
+      {id:4, date:'2026-09-01', type:'train', source:'self', speed:81, strike:70, mood:5, pitchCount:80, hits:3, atBats:5, strikeout:3, struckOut:0, note:'破 80!', location:null, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:''},
+      {id:5, date:'2026-09-03', type:'match', source:'parent', speed:82, strike:72, mood:5, pitchCount:95, hits:2, atBats:4, strikeout:5, struckOut:2, note:'新生賽第一場', location:null, opponent:'香港北區', scoreSelf:6, scoreOpp:4, result:'win', venue:'獅子山球場'},
+    ],
+    reflections: [
+      {id:101, date:'2026-08-25', type:'train', keep:'控球动作稳定', improve:'球速还需提升', highlight:'第一次用 Rapsodo 测到 78', source:'self'},
+      {id:102, date:'2026-08-29', type:'match', keep:'团队配合好', improve:'关键时刻紧张控球不稳', highlight:'面对台北打者投出 4 个三振', source:'self'},
+      {id:103, date:'2026-09-03', type:'match', keep:'球速节奏保持', improve:'打击被左投压制', highlight:'破 82 km/h！对阵北区赢球', source:'parent'},
+    ],
+    bodyLogs: [],
+    // v6 单球种子：8 月底一场训练 30 球（含好球坏球分布）
+    pitches: [
+      {date:'2026-08-25', speed:78, location:6, isStrike:true, source:'self'},
+      {date:'2026-08-25', speed:78, location:7, isStrike:true, source:'self'},
+      {date:'2026-08-25', speed:79, location:12, isStrike:true, source:'self'},
+      {date:'2026-08-25', speed:77, location:13, isStrike:true, source:'self'},
+      {date:'2026-08-25', speed:77, location:17, isStrike:true, source:'self'},
+      {date:'2026-08-25', speed:78, location:11, isStrike:true, source:'self'},
+      {date:'2026-08-25', speed:78, location:8, isStrike:true, source:'self'},
+      {date:'2026-08-25', speed:76, location:3, isStrike:false, source:'self'},  // 外角高坏球
+      {date:'2026-08-25', speed:75, location:14, isStrike:false, source:'self'}, // 右中坏球
+      {date:'2026-08-25', speed:74, location:21, isStrike:false, source:'self'}, // 外低坏球
+      {date:'2026-09-03', speed:82, location:7, isStrike:true, source:'self'},
+      {date:'2026-09-03', speed:82, location:11, isStrike:true, source:'self'},
+      {date:'2026-09-03', speed:82, location:12, isStrike:true, source:'self'},
+      {date:'2026-09-03', speed:81, location:16, isStrike:true, source:'self'},
+      {date:'2026-09-03', speed:83, location:8, isStrike:true, source:'self'},
+      {date:'2026-09-03', speed:82, location:13, isStrike:true, source:'self'},
+      {date:'2026-09-03', speed:81, location:17, isStrike:true, source:'self'},
+      {date:'2026-09-03', speed:80, location:18, isStrike:true, source:'self'},
+      {date:'2026-09-03', speed:80, location:2, isStrike:false, source:'self'},
+      {date:'2026-09-03', speed:79, location:19, isStrike:false, source:'self'},
+    ],
+    // v6 设备数据种子：10 行 Rapsodo CSV 解析后的样子
+    deviceLogs: [
+      {date:'2026-09-04', source:'rapsodo', speed:82, spinRate:2280, break:-3.4, isStrike:true, rawSpeedMph:50.9},
+      {date:'2026-09-04', source:'rapsodo', speed:81, spinRate:2265, break:-3.1, isStrike:true, rawSpeedMph:50.3},
+      {date:'2026-09-04', source:'rapsodo', speed:82, spinRate:2295, break:-3.6, isStrike:false, rawSpeedMph:51.0},
+      {date:'2026-09-04', source:'rapsodo', speed:83, spinRate:2310, break:-2.9, isStrike:true, rawSpeedMph:51.6},
+      {date:'2026-09-04', source:'rapsodo', speed:81, spinRate:2248, break:-3.2, isStrike:true, rawSpeedMph:50.3},
+    ]
+  };
+  localStorage.setItem(KEY, JSON.stringify(seed));
+  return seed;
+}
+function saveData(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
+
+let DATA = loadData();
+let currentTab = 'home';
+let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:80, strike:70, mood:4, pitchCount:80, strikeout:0, hits:0, atBats:0, struckOut:0, note:'', location:null, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:'' };
+let bodyForm = { date: new Date().toISOString().slice(0,10), height:'', weight:'' };
+let reflectForm = { date: new Date().toISOString().slice(0,10), type:'train', keep:'', improve:'', highlight:'', source:'self' };
+// 投球会话暂存
+let pitchSession = { entries: [], speed: 80 };
+// CSV 导入暂存
+let csvPreview = null;
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+function levelOf(speed) {
+  if (speed >= 85) return {l:5, name:LANG==='zh'?'Ace Pitcher · 全垒投':'Ace Pitcher'};
+  if (speed >= 82) return {l:4, name:LANG==='zh'?'Starter · 先发投手':'Starter'};
+  if (speed >= 80) return {l:3, name:LANG==='zh'?'Rising · 上升期':'Rising'};
+  if (speed >= 78) return {l:2, name:LANG==='zh'?'Rookie · 新秀':'Rookie'};
+  return {l:1, name:LANG==='zh'?'Trainee · 训练生':'Trainee'};
+}
+function avatar(l) { return ['🥎','⚾','⚾','🔥','👑'][l-1]; }
+function pct(cur, target=85, min=70) { return Math.min(100, Math.max(0, ((cur-min)/(target-min))*100)); }
+function latestSpeed() { return DATA.logs.length ? DATA.logs[DATA.logs.length-1].speed : 0; }
+function avgMood() { if (!DATA.logs.length) return 0; return DATA.logs.slice(-5).reduce((s,l)=>s+l.mood,0) / Math.min(5,DATA.logs.length); }
+function calcAge(birth) { if (!birth) return null; const b = new Date(birth); const now = new Date(); let age = now.getFullYear() - b.getFullYear(); const m = now.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--; return age; }
+function calcBatting(hits, atBats) { if (!atBats || atBats === 0) return null; return +(hits / atBats).toFixed(3); }
+function fmtBat(avg) { if (avg == null) return '—'; return avg.toFixed(3).replace(/^0+/, '') || '.000'; }
+function latestBody() { if (!DATA.bodyLogs.length) return null; return [...DATA.bodyLogs].sort((a,b)=>a.date.localeCompare(b.date)).pop(); }
+function calcBMI(h, w) { if (!h || !w) return null; return +(w / Math.pow(h/100, 2)).toFixed(1); }
+function fmtLoc(loc) { if (!loc) return ''; if (loc.name) return loc.name; return loc.lat.toFixed(4)+', '+loc.lng.toFixed(4); }
+function srcLabel(s) { if (s==='coach') return t('src_coach'); if (s==='parent') return t('src_parent'); return t('src_self'); }
+function resultLabel(r) { if (r==='win') return t('win'); if (r==='loss') return t('loss'); if (r==='draw') return t('draw'); return ''; }
+
+// ============ v6 球数预警 ============
+function weeklyPitchLimit(age) {
+  if (!age) return 800;       // 默认 12 岁
+  if (age <= 8) return 400;
+  if (age <= 12) return 800;
+  if (age <= 15) return 1100;
+  return 1300;
+}
+function getWeekStart(dateStr) {
+  const d = new Date(dateStr);
+  const day = d.getDay() || 7;     // 周一为第一天
+  d.setDate(d.getDate() - day + 1);
+  return d.toISOString().slice(0,10);
+}
+function pitchesThisWeek() {
+  if (!DATA.pitches || !DATA.pitches.length) return 0;
+  const now = new Date();
+  const today = now.toISOString().slice(0,10);
+  const monday = getWeekStart(today);
+  return DATA.pitches.filter(p => p.date >= monday && p.date <= today).length;
+}
+function warningCardHTML() {
+  const age = calcAge(DATA.profile.birthdate);
+  const limit = weeklyPitchLimit(age);
+  const thisWeek = pitchesThisWeek();
+  const pct = Math.min(150, thisWeek / limit * 100);
+  let cls = 'ok', badge = t('warn_ok'), msg = '';
+  if (pct >= 100) { cls = 'high'; badge = t('warn_high'); msg = t('warn_sub_high', {over: thisWeek-limit}); }
+  else if (pct >= 80) { cls = 'mid'; badge = t('warn_mid'); }
+  return `<div class="card warning-card ${cls}">
+    <h3 style="color:${cls==='high'?'#7f1d1d':cls==='mid'?'#92400e':'#065f46'}">${t('warn_title')} · ${badge}</h3>
+    <div style="font-size:13px;color:#1f2937;line-height:1.6;margin-top:4px">
+      ${t('warn_sub', {n:thisWeek, max:limit})}${msg?'<br>'+msg:''}
+    </div>
+    <div class="warning-bar"><div class="fill" style="width:${pct}%"></div></div>
+    <div style="font-size:10px;color:#64748b;margin-top:4px;display:flex;justify-content:space-between">
+      <span>0</span><span>80% = ${Math.round(limit*0.8)}</span><span>100% = ${limit}</span>
+    </div>
+  </div>`;
+}
+
+// ============ v6 9宫格 session ============
+function openPitchModal() {
+  pitchSession = { entries: [], speed: 80 };
+  renderPitchGrid();
+  document.getElementById('pm_speed').value = 80;
+  updateSessionStats();
+  document.getElementById('pitchModal').classList.add('show');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+function renderPitchGrid() {
+  const counts = {};
+  pitchSession.entries.forEach(e => { counts[e.location] = (counts[e.location]||0) + 1; });
+  const g = document.getElementById('pitchGrid');
+  g.innerHTML = '';
+  for (let i=0; i<25; i++) {
+    const cell = document.createElement('div');
+    const strike = isStrike(i);
+    const cnt = counts[i] || 0;
+    cell.className = 'pitch-cell ' + (strike ? 'strike' : 'ball');
+    if (cnt > 0) cell.classList.add(strike ? 'hit-strike' : 'hit-ball');
+    cell.innerHTML = `<span class="cnt">${cnt||''}</span><span class="pos">${i+1}</span>`;
+    cell.onclick = () => logPitch(i);
+    g.appendChild(cell);
+  }
+}
+function logPitch(idx) {
+  const speed = +document.getElementById('pm_speed').value || 80;
+  pitchSession.entries.push({ location: idx, isStrike: isStrike(idx), speed, ts: Date.now() });
+  renderPitchGrid();
+  updateSessionStats();
+}
+function updateSessionStats() {
+  const n = pitchSession.entries.length;
+  const s = pitchSession.entries.filter(e=>e.isStrike).length;
+  const b = n - s;
+  const pct = n ? Math.round(s/n*100) : 0;
+  document.getElementById('sessionTotal').textContent = n;
+  document.getElementById('sessionStrike').textContent = s;
+  document.getElementById('sessionBall').textContent = b;
+  document.getElementById('sessionStrikePct').textContent = pct + '%';
+}
+function undoPitch() {
+  pitchSession.entries.pop();
+  renderPitchGrid();
+  updateSessionStats();
+}
+function savePitchSession() {
+  if (!pitchSession.entries.length) { toast(LANG==='zh'?'没有投球可保存':'No pitches to save'); return; }
+  const today = new Date().toISOString().slice(0,10);
+  const newRows = pitchSession.entries.map(e => ({ date: today, speed: e.speed, location: e.location, isStrike: e.isStrike, source:'self' }));
+  DATA.pitches.push(...newRows);
+  saveData(DATA);
+  toast(`✓ ${LANG==='zh'?'已保存':'Saved'} ${newRows.length} ${LANG==='zh'?'球':'pitches'}`);
+  closeModal('pitchModal');
+  render();
+}
+
+// ============ v6 CSV 解析 ============
+const RAPSODO_FIELDS = {
+  'pitch_id':'id', 'date':'date', 'time':'time',
+  'speed_mph':'speedMph', 'velocity_mph':'speedMph', 'speed':'speedMph', 'velocity':'speedMph',
+  'spin_rate':'spinRate', 'spin_rpm':'spinRate', 'rpm':'spinRate',
+  'break':'breakIn', 'break_in':'breakIn', 'horizontal_break':'breakIn',
+  'strike':'isStrike', 'result':'isStrike', 'is_strike':'isStrike',
+  'location_x':'locX', 'location_y':'locY'
+};
+const BLAST_FIELDS = {
+  'swing_speed':'swingSpeed', 'exit_velocity':'exitV', 'launch_angle':'launchAngle',
+  'attack_angle':'attackAngle', 'date':'date', 'time':'time'
+};
+function parseCsv(text) {
+  const lines = text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if (lines.length < 2) return { headers:[], rows:[], preview:[], format:'unknown' };
+  const headers = lines[0].split(',').map(s=>s.trim().toLowerCase().replace(/[^a-z0-9_]/g,''));
+  const isRapsodo = headers.includes('speed_mph') || headers.includes('spin_rate') || headers.includes('rpm');
+  const isBlast = headers.includes('swing_speed') || headers.includes('exit_velocity');
+  const format = isRapsodo ? 'rapsodo' : (isBlast ? 'blast' : 'unknown');
+  const fieldMap = isRapsodo ? RAPSODO_FIELDS : (isBlast ? BLAST_FIELDS : {});
+  const rows = [];
+  for (let i=1;i<lines.length;i++) {
+    const cols = lines[i].split(',').map(s=>s.trim());
+    const row = {};
+    headers.forEach((h, j) => {
+      const key = fieldMap[h] || h;
+      const v = cols[j];
+      if (v == null) return;
+      if (key === 'speedMph' || key === 'spinRate' || key === 'breakIn' || key === 'swingSpeed' || key === 'exitV') row[key] = parseFloat(v);
+      else if (key === 'isStrike') row[key] = ['1','true','y','yes','strike','k'].includes(v.toLowerCase());
+      else row[key] = v;
+    });
+    row.__date = row.date || (i<10 ? '2026-09-04' : '');  // 兜底日期
+    row.__source = format;
+    if (!row.speedMph && !row.swingSpeed) continue;   // 跳过无速度行
+    rows.push(row);
+  }
+  // 速度转 km/h（mph × 1.60934）
+  rows.forEach(r => { if (r.speedMph) r.speed = +(r.speedMph * 1.60934).toFixed(1); });
+  const preview = rows.slice(0,8).map(r => {
+    const parts = [];
+    parts.push(`${r.__date||'-'}`);
+    if (r.time) parts.push(r.time);
+    if (r.speed) parts.push(`${r.speed} km/h`);
+    if (r.spinRate) parts.push(`spin ${r.spinRate}`);
+    if (r.breakIn!=null) parts.push(`break ${r.breakIn}in`);
+    if (r.swingSpeed) parts.push(`swing ${r.swingSpeed}`);
+    if (r.exitV) parts.push(`exit ${r.exitV}`);
+    if (r.isStrike!=null) parts.push(r.isStrike?'⚾K':'○B');
+    return parts.join(' · ');
+  });
+  return { headers, rows, preview, format, total: rows.length };
+}
+function openCsvModal() {
+  csvPreview = null;
+  document.getElementById('csvPreview').style.display = 'none';
+  document.getElementById('csvPreview').innerHTML = '';
+  document.getElementById('csvText').value = '';
+  document.getElementById('csvFile').value = '';
+  document.getElementById('importCsv').style.display = 'none';
+  document.getElementById('csvModal').classList.add('show');
+}
+function loadCsvSample(kind) {
+  const rapsodo = `pitch_id,date,time,speed_mph,spin_rpm,break_in,strike
+1,2026-09-10,15:30,52.4,2318,-3.2,1
+2,2026-09-10,15:30,51.8,2290,-2.8,1
+3,2026-09-10,15:31,53.1,2345,-3.6,0
+4,2026-09-10,15:31,52.6,2310,-3.0,1
+5,2026-09-10,15:32,51.5,2280,-2.6,1
+6,2026-09-10,15:32,53.4,2352,-3.8,0
+7,2026-09-10,15:33,52.9,2325,-3.3,1
+8,2026-09-10,15:33,52.2,2298,-2.9,1`;
+  const blast = `swing_id,date,swing_speed,exit_velocity,launch_angle,attack_angle
+1,2026-09-10,68.4,82.1,12.3,8.5
+2,2026-09-10,70.2,85.6,15.7,9.2
+3,2026-09-10,67.8,79.4,8.4,7.8
+4,2026-09-10,71.5,88.2,18.5,10.1
+5,2026-09-10,69.0,83.7,11.2,8.7`;
+  document.getElementById('csvText').value = kind==='rapsodo' ? rapsodo : blast;
+}
+function importCsv() {
+  if (!csvPreview || !csvPreview.rows.length) return;
+  csvPreview.rows.forEach(r => {
+    DATA.deviceLogs.push({
+      date: r.__date || new Date().toISOString().slice(0,10),
+      source: r.__source,
+      speed: r.speed || null,
+      spinRate: r.spinRate || null,
+      break: r.breakIn != null ? r.breakIn : null,
+      isStrike: r.isStrike != null ? r.isStrike : null,
+      swingSpeed: r.swingSpeed || null,
+      exitV: r.exitV || null,
+      rawSpeedMph: r.speedMph || null,
+    });
+  });
+  saveData(DATA);
+  toast(`✓ ${LANG==='zh'?'已导入':'Imported'} ${csvPreview.rows.length} ${LANG==='zh'?'条':'rows'}`);
+  closeModal('csvModal');
+  render();
+}
+
+function useGPS() {
+  if (!navigator.geolocation) { toast(t('loc_no')); return; }
+  toast(LANG==='zh'?'定位中…':'Locating…');
+  navigator.geolocation.getCurrentPosition(
+    pos => { form.location = { lat:+pos.coords.latitude.toFixed(5), lng:+pos.coords.longitude.toFixed(5), name:'', accuracy:pos.coords.accuracy }; saveData(DATA); render(); toast(t('loc_ok')); },
+    err => { console.warn(err); toast(t('loc_denied')); },
+    { enableHighAccuracy:false, timeout:10000, maximumAge:60000 }
+  );
+}
+function clearGPS() { form.location = null; render(); }
+
+// 语音识别（按 field name 区分）
+let recog = null;
+let isRecording = false;
+let voiceField = null;
+function startVoice(field) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast(t('mic_no')); return; }
+  if (isRecording) { stopVoice(); return; }
+  voiceField = field;
+  recog = new SR();
+  recog.lang = LANG==='zh' ? 'zh-HK' : 'en-US';
+  recog.interimResults = true;
+  recog.continuous = false;
+  let finalText = '';
+  recog.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const txt = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += txt;
+      else interim += txt;
+    }
+    const ta = document.getElementById('f_'+voiceField);
+    if (ta) ta.value = (ta.value || '') + (finalText + interim);
+  };
+  recog.onerror = (e) => {
+    console.warn('recog err', e);
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast(t('mic_deny'));
+    isRecording = false; updateMicBtn(voiceField);
+  };
+  recog.onend = () => {
+    isRecording = false; updateMicBtn(voiceField);
+    if (finalText) {
+      if (voiceField === 'note') form.note = document.getElementById('f_note').value;
+      else reflectForm[voiceField] = document.getElementById('f_'+voiceField).value;
+      saveData(DATA);
+      toast(t('mic_done'));
+    }
+    voiceField = null;
+  };
+  try { recog.start(); isRecording = true; updateMicBtn(field); } catch (e) { toast(t('mic_deny')); }
+}
+function stopVoice() { try { recog && recog.stop(); } catch(e){} isRecording = false; updateMicBtn(voiceField); }
+function updateMicBtn(field) {
+  document.querySelectorAll('.btn.mic.mini').forEach(b => b.classList.remove('recording'));
+  if (!field) return;
+  const b = document.getElementById('mic_'+field);
+  if (!b) return;
+  if (isRecording && voiceField === field) { b.classList.add('recording'); b.textContent = t('mic_rec'); }
+  else { b.classList.remove('recording'); b.textContent = t('mic_idle'); }
+}
+
+function render() {
+  const s = document.getElementById('screen');
+  s.innerHTML = '';
+  if (currentTab==='home') renderHome(s);
+  else if (currentTab==='log') renderLog(s);
+  else if (currentTab==='chart') renderChart(s);
+  else if (currentTab==='review') renderReview(s);
+  else if (currentTab==='me') renderMe(s);
+  document.querySelectorAll('.tab').forEach(t=>{ t.classList.toggle('active', t.dataset.tab===currentTab); });
+  applyI18n();
+}
+
+function renderHome(s) {
+  const sp = latestSpeed();
+  const lv = levelOf(sp);
+  const mo = avgMood();
+  const p = pct(sp);
+  const last = DATA.logs[DATA.logs.length-1];
+  const bat = last ? calcBatting(last.hits, last.atBats) : null;
+  const age = calcAge(DATA.profile.birthdate);
+  const body = latestBody();
+  const bmi = body ? calcBMI(body.height, body.weight) : null;
+  const totalSO = DATA.logs.reduce((s,l)=>s+(l.strikeout||0),0) + (DATA.deviceLogs||[]).reduce((s,l)=>s+((l.isStrike===true)?1:0),0);
+  const wins = DATA.logs.filter(l=>l.result==='win').length;
+  s.innerHTML = `
+    ${warningCardHTML()}
+    <div class="h-screen">${t('home_title')}</div>
+    <div class="sub-screen">${DATA.profile.name} · ${age!=null?age+t('years')+' · ':''}${DATA.profile.title}</div>
+    <div class="card">
+      <div class="avatar-area">
+        <div class="avatar level-${lv.l}">${avatar(lv.l)}</div>
+        <div class="avatar-info">
+          <div class="name">Level ${lv.l} · ${lv.name}</div>
+          <div class="title">${DATA.profile.title}</div>
+          <div class="level-bar"><div class="level-fill" style="width:${p}%"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat energy"><div class="v">${sp||'—'}</div><div class="l">${t('legend_speed')} km/h</div></div>
+      <div class="stat mood"><div class="v">${mo?mo.toFixed(1):'—'}</div><div class="l">${t('legend_mood')} / 5</div></div>
+      <div class="stat bat"><div class="v">${bat!=null?fmtBat(bat):'—'}</div><div class="l">${t('legend_bat')}</div></div>
+    </div>
+    ${(body||age) ? `<div class="stat-row">
+      ${age!=null?`<div class="stat body"><div class="v">${age}</div><div class="l">${t('years')}</div></div>`:''}
+      ${body?`<div class="stat body"><div class="v">${body.height}</div><div class="l">${t('pr_height')} cm</div></div>`:''}
+      ${body?`<div class="stat body"><div class="v">${body.weight}</div><div class="l">${t('pr_weight')} kg</div></div>`:''}
+      ${bmi?`<div class="stat body"><div class="v">${bmi}</div><div class="l">${t('pr_bmi')}</div></div>`:''}
+    </div>` : ''}
+    <div class="card">
+      <h3>${t('badges')}</h3>
+      <span class="badge ${sp>=80?'gold':'lock'}">${t('b1')}</span>
+      <span class="badge ${sp>=82?'gold':'lock'}">${t('b2')}</span>
+      <span class="badge ${sp>=85?'gold':'lock'}">${t('b3')}</span>
+      <span class="badge ${mo>=4.5?'gold':'lock'}">${t('b4')}</span>
+      <span class="badge ${bat!=null&&bat>=0.5?'gold':'lock'}">${t('b5')}</span>
+      <span class="badge ${DATA.logs.length>=10?'gold':'lock'}">${t('b6')}</span>
+      ${age!=null?`<span class="badge ${age>=12?'gold':'lock'}">${t('b7').replace('12',age)}</span>`:''}
+      <span class="badge ${totalSO>=10?'gold':'lock'}">${t('b8')}</span>
+      <span class="badge ${wins>=5?'gold':'lock'}">${t('b9')}</span>
+    </div>
+    <div class="card">
+      <h3>${t('last_log')} · ${last?last.date:''}</h3>
+      ${last ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            ${last.type==='match'?t('match'):t('train')}
+            <span class="src-pill ${last.source}">${srcLabel(last.source)}</span>
+            ${last.type==='match' && last.result?`<span class="badge ${last.result}">${resultLabel(last.result)}</span>`:''}
+          </div>
+          <div style="font-size:11px;color:#7a8aa1;margin-top:2px">${last.note||'—'}</div>
+          <div style="font-size:11px;color:#7a8aa1;margin-top:2px">${LANG==='zh'?'投':'Threw '} <b>${last.pitchCount||0}</b> · ${LANG==='zh'?'三振':'K'} <b>${last.strikeout||0}</b> · ${LANG==='zh'?'打击':'Bat'} ${last.hits||0}/${last.atBats||0} · ${LANG==='zh'?'被三振':'SO'} ${last.struckOut||0}</div>
+          ${last.type==='match' && (last.opponent||last.scoreSelf||last.scoreOpp)?`<div style="font-size:11px;color:#1f3a5f;margin-top:4px;font-weight:600">vs ${last.opponent||'?'} · <b>${last.scoreSelf}-${last.scoreOpp}</b></div>`:''}
+          ${last.venue?`<div class="loc-pill">🏟 ${last.venue}</div>`:''}
+        </div>
+        <div style="font-size:22px;font-weight:800;color:#dc2626">${last.speed}</div>
+      </div>` : `<div class="empty">${t('empty')}</div>`}
+    </div>
+  `;
+}
+
+function renderLog(s) {
+  const locDisplay = form.location ? `<div class="loc-pill">📍 ${fmtLoc(form.location)} <span class="x" onclick="clearGPS()">×</span></div>` : '';
+  s.innerHTML = `
+    <div class="h-screen">${t('log_title')}</div>
+    <div class="sub-screen">${t('log_sub')}</div>
+
+    <!-- v6 新增：投球快记 + CSV 导入快捷入口 -->
+    <div class="row">
+      <button class="btn" onclick="openPitchModal()" style="background:linear-gradient(135deg,#dc2626,#ef4444);font-size:13px;padding:12px">${t('quick_pitch')}</button>
+      <button class="btn warn" onclick="openCsvModal()" style="font-size:13px;padding:12px">${t('import_csv_btn')}</button>
+    </div>
+    <div style="font-size:11px;color:#7a8aa1;margin:-6px 0 12px;text-align:center">${t('quick_pitch_sub')}</div>
+
+    <div class="card">
+      <h3>${t('add_new')}</h3>
+      <div class="field"><label>${t('date')}</label><input type="date" id="f_date" value="${form.date}"></div>
+      <div class="field"><label>${t('type')}</label>
+        <div class="seg" id="f_type">
+          <div class="seg-item ${form.type==='train'?'on':''}" data-v="train">${t('train')}</div>
+          <div class="seg-item ${form.type==='match'?'on':''}" data-v="match">${t('match')}</div>
+        </div>
+      </div>
+      <div class="field"><label>${t('source')}</label>
+        <div class="seg" id="f_source">
+          <div class="seg-item ${form.source==='self'?'on':''}" data-v="self">${t('src_self')}</div>
+          <div class="seg-item ${form.source==='coach'?'on':''}" data-v="coach">${t('src_coach')}</div>
+          <div class="seg-item ${form.source==='parent'?'on':''}" data-v="parent">${t('src_parent')}</div>
+        </div>
+      </div>
+      <div class="match-only ${form.type==='match'?'show':''}" id="matchFields">
+        <div class="section-title">${t('match_section')}</div>
+        <div class="field"><label>${t('opponent')}</label><input type="text" id="f_opponent" value="${form.opponent}" placeholder="${LANG==='zh'?'如：台北聯隊':'e.g. Taipei Tigers'}"></div>
+        <div class="row">
+          <div class="field"><label>${LANG==='zh'?'我方':'Self'}</label><input type="number" id="f_scoreSelf" min="0" max="50" value="${form.scoreSelf}"></div>
+          <div class="field"><label>${LANG==='zh'?'对方':'Opp'}</label><input type="number" id="f_scoreOpp" min="0" max="50" value="${form.scoreOpp}"></div>
+        </div>
+        <div class="field"><label>${t('result')}</label>
+          <div class="seg" id="f_result">
+            <div class="seg-item ${form.result==='win'?'on':''}" data-v="win">${t('win')}</div>
+            <div class="seg-item ${form.result==='loss'?'on':''}" data-v="loss">${t('loss')}</div>
+            <div class="seg-item ${form.result==='draw'?'on':''}" data-v="draw">${t('draw')}</div>
+          </div>
+        </div>
+        <div class="field"><label>${t('venue')}</label><input type="text" id="f_venue" value="${form.venue}" placeholder="${t('venue_ph')}"></div>
+      </div>
+      <div class="field">
+        <label>${t('loc_btn')}</label>
+        <button class="btn ghost" id="gpsBtn" style="font-size:12px;padding:10px">📍 ${LANG==='zh'?'获取当前位置':'Get current location'}</button>
+        ${locDisplay}
+      </div>
+      <div class="section-title">${t('pitch_section')}</div>
+      <div class="row">
+        <div class="field"><label>${t('speed')}</label><input type="number" id="f_speed" min="50" max="120" value="${form.speed}"></div>
+        <div class="field"><label>${t('pitch_count')}</label><input type="number" id="f_pitchCount" min="0" max="500" value="${form.pitchCount}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>${t('strike_rate')}</label><input type="number" id="f_strike" min="0" max="100" value="${form.strike}"></div>
+        <div class="field"><label>${t('strikeout')}</label><input type="number" id="f_strikeout" min="0" max="50" value="${form.strikeout}"></div>
+      </div>
+      <div class="section-title">${t('bat_section')}</div>
+      <div class="row">
+        <div class="field"><label>${t('hits')}</label><input type="number" id="f_hits" min="0" max="20" value="${form.hits}"></div>
+        <div class="field"><label>${t('at_bats')}</label><input type="number" id="f_atBats" min="0" max="20" value="${form.atBats}"></div>
+        <div class="field"><label>${t('struck_out')}</label><input type="number" id="f_struckOut" min="0" max="20" value="${form.struckOut}"></div>
+      </div>
+      <div class="field"><label>${t('mood')}</label>
+        <div class="seg" id="f_mood">
+          ${[1,2,3,4,5].map(n=>`<div class="seg-item ${form.mood===n?'on':''}" data-v="${n}">${'⭐'.repeat(n)}</div>`).join('')}
+        </div>
+      </div>
+      <div class="field"><label>${t('note')}</label>
+        <textarea id="f_note" placeholder="${t('note_ph')}">${form.note}</textarea>
+        <button class="btn mic mini" id="mic_note" style="margin-top:6px" onclick="startVoice('note')">${t('mic_idle')}</button>
+      </div>
+      <button class="btn" id="saveBtn">${t('save')}</button>
+    </div>
+    <div class="card">
+      <h3>${t('history')} (${DATA.logs.length})</h3>
+      <button class="btn ghost" id="seedBtn" style="margin-bottom:10px;font-size:12px;padding:8px">🌱 ${t('reset')}</button>
+      <div id="logList">${renderLogList()}</div>
+    </div>
+  `;
+  bindFormEvents();
+  document.getElementById('saveBtn').onclick = saveLog;
+  document.getElementById('gpsBtn').onclick = useGPS;
+  document.getElementById('seedBtn').onclick = () => {
+    if (confirm(t('yes')+'?')) { localStorage.removeItem(KEY); DATA = loadData(); toast('✓ '+(LANG==='zh'?'已重置':'Reset')); render(); }
+  };
+  // CSV 弹层的事件
+  document.getElementById('parseCsv').onclick = () => {
+    const text = document.getElementById('csvText').value.trim();
+    if (!text) { toast(LANG==='zh'?'先粘贴或选择文件':'Paste or pick file first'); return; }
+    csvPreview = parseCsv(text);
+    const pv = document.getElementById('csvPreview');
+    pv.style.display = 'block';
+    pv.innerHTML = `<span class="ok">✓ ${LANG==='zh'?'识别格式：':'Format:'} ${csvPreview.format}</span>  <span class="ok">${LANG==='zh'?'共':'Total:'} ${csvPreview.total} ${LANG==='zh'?'条':'rows'}</span>
+      <pre style="margin-top:6px;color:#cbd5e1;font-size:10px">${csvPreview.preview.map((l,i)=>`${i+1}. ${l}`).join('\n')}</pre>
+      ${csvPreview.rows.length?'':`<span class="err">× ${LANG==='zh'?'无可识别行':'No valid rows'}</span>`}`;
+    if (csvPreview.rows.length) document.getElementById('importCsv').style.display = 'block';
+  };
+  document.getElementById('csvFile').onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = ev => { document.getElementById('csvText').value = ev.target.result; };
+    reader.readAsText(f);
+  };
+  document.getElementById('importCsv').onclick = importCsv;
+}
+
+function renderLogList() {
+  if (!DATA.logs.length) return `<div class="empty">${t('empty')}</div>`;
+  return [...DATA.logs].reverse().map(l => {
+    const bat = calcBatting(l.hits, l.atBats);
+    return `
+    <div class="log-item">
+      <div class="log-date">${l.date.slice(5)}<br><span style="color:#94a3b8">${l.type==='match'?t('match'):t('train')}</span></div>
+      <div class="log-info">
+        <div class="top" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          ${l.note||'(no note)'}
+          <span class="src-pill ${l.source||'self'}">${srcLabel(l.source||'self')}</span>
+          ${l.type==='match' && l.result?`<span class="badge ${l.result}">${resultLabel(l.result)}</span>`:''}
+        </div>
+        <div class="bot">${LANG==='zh'?'投':'Threw '} ${l.pitchCount||0} · ${l.strike||0}% · K ${l.strikeout||0} · ${t('legend_bat')} ${bat!=null?fmtBat(bat):'-'} · SO ${l.struckOut||0} · ${'⭐'.repeat(l.mood)}</div>
+        ${l.type==='match' && (l.opponent||l.scoreSelf||l.scoreOpp)?`<div style="font-size:11px;color:#1f3a5f;margin-top:2px;font-weight:600">vs ${l.opponent||'?'} <b>${l.scoreSelf}-${l.scoreOpp}</b></div>`:''}
+        ${l.venue?`<div class="loc-pill" style="margin-top:3px">🏟 ${l.venue}</div>`:''}
+      </div>
+      <div class="log-speed">${l.speed}</div>
+      <div class="delete-x" data-del="${l.id}">×</div>
+    </div>
+  `}).join('');
+}
+
+function saveLog() {
+  if (!form.date) { toast(t('date')); return; }
+  DATA.logs.push({id:Date.now(), ...form});
+  saveData(DATA);
+  form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:form.speed, strike:form.strike, mood:4, pitchCount:form.pitchCount, strikeout:0, hits:0, atBats:0, struckOut:0, note:'', location:null, opponent:'', scoreSelf:0, scoreOpp:0, result:'', venue:'' };
+  toast('✓ '+(LANG==='zh'?'已保存':'Saved')); render();
+}
+
+function bindFormEvents() {
+  document.getElementById('f_date').onchange = e => form.date = e.target.value;
+  document.getElementById('f_speed').onchange = e => form.speed = +e.target.value;
+  document.getElementById('f_strike').onchange = e => form.strike = +e.target.value;
+  document.getElementById('f_pitchCount').onchange = e => form.pitchCount = +e.target.value;
+  document.getElementById('f_strikeout').onchange = e => form.strikeout = +e.target.value;
+  document.getElementById('f_hits').onchange = e => form.hits = +e.target.value;
+  document.getElementById('f_atBats').onchange = e => form.atBats = +e.target.value;
+  document.getElementById('f_struckOut').onchange = e => form.struckOut = +e.target.value;
+  document.getElementById('f_note').oninput = e => form.note = e.target.value;
+  if (document.getElementById('f_opponent')) {
+    document.getElementById('f_opponent').oninput = e => form.opponent = e.target.value;
+    document.getElementById('f_scoreSelf').onchange = e => form.scoreSelf = +e.target.value;
+    document.getElementById('f_scoreOpp').onchange = e => form.scoreOpp = +e.target.value;
+    document.getElementById('f_venue').oninput = e => form.venue = e.target.value;
+    document.querySelectorAll('#f_result .seg-item').forEach(el=>{ el.onclick = () => { form.result = el.dataset.v; render(); }; });
+  }
+  document.querySelectorAll('#f_type .seg-item').forEach(el=>{ el.onclick = () => { form.type = el.dataset.v; render(); }; });
+  document.querySelectorAll('#f_source .seg-item').forEach(el=>{ el.onclick = () => { form.source = el.dataset.v; render(); }; });
+  document.querySelectorAll('#f_mood .seg-item').forEach(el=>{ el.onclick = () => { form.mood = +el.dataset.v; render(); }; });
+  document.querySelectorAll('[data-del]').forEach(el=>{
+    el.onclick = () => { if (confirm(t('yes')+'?')) { DATA.logs = DATA.logs.filter(l => l.id != el.dataset.del); saveData(DATA); render(); } };
+  });
+}
+
+function renderChart(s) {
+  s.innerHTML = `
+    <div class="h-screen">${t('chart_title')}</div>
+    <div class="sub-screen">${t('chart_sub')}</div>
+    <div class="chart-wrap">
+      <div class="chart-title"><span>${t('c1')}</span><div class="legend"><span><span class="lg-dot" style="background:#dc2626"></span>${t('legend_speed')}</span><span><span class="lg-dot" style="background:#7c3aed"></span>${t('legend_mood')}</span></div></div>
+      <svg viewBox="0 0 320 200" style="width:100%;height:auto">${renderSvgChart('dual')}</svg>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title"><span>${t('c2')}</span><div class="legend"><span><span class="lg-dot" style="background:#16a34a"></span>${t('legend_bat')}</span><span><span class="lg-dot" style="background:#0891b2"></span>${t('legend_pitch')}</span></div></div>
+      <svg viewBox="0 0 320 200" style="width:100%;height:auto">${renderSvgChart('bat')}</svg>
+    </div>
+    <!-- v6 新增：9宫格热点图 -->
+    <div class="chart-wrap">
+      <div class="chart-title"><span>${t('c5')}</span><div class="legend"><span><span style="display:inline-block;width:10px;height:10px;background:#16a34a;border-radius:2px"></span>${LANG==='zh'?'好球':'Strike'}</span><span><span style="display:inline-block;width:10px;height:10px;background:#dc2626;border-radius:2px"></span>${LANG==='zh'?'坏球':'Ball'}</span></div></div>
+      <div id="heatmap9"></div>
+    </div>
+    <!-- v6 新增：Rapsodo 设备数据曲线 -->
+    ${DATA.deviceLogs.length ? `<div class="chart-wrap">
+      <div class="chart-title"><span>${t('c6')}</span><div class="legend"><span><span class="lg-dot" style="background:#dc2626"></span>${LANG==='zh'?'转速':'Spin'}</span><span><span class="lg-dot" style="background:#0891b2"></span>${LANG==='zh'?'偏移':'Break'}</span></div></div>
+      <svg viewBox="0 0 320 180" style="width:100%;height:auto">${renderDeviceChart()}</svg>
+    </div>` : ''}
+    <div class="chart-wrap">
+      <div class="chart-title"><span>${t('c4')}</span><div class="legend"><span><span class="lg-dot" style="background:#dc2626"></span>${t('legend_so')}</span></div></div>
+      <svg viewBox="0 0 320 180" style="width:100%;height:auto">${renderSOChart()}</svg>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title"><span>${t('c3')}</span><div class="legend"><span><span class="lg-dot" style="background:#0891b2"></span>${t('legend_height')}</span><span><span class="lg-dot" style="background:#7c3aed"></span>${t('legend_weight')}</span></div></div>
+      <svg viewBox="0 0 320 180" style="width:100%;height:auto">${renderBodyChart()}</svg>
+    </div>
+  `;
+  renderHeatmap9();
+}
+
+// v6 9宫格热点图（5x5 grid，捕手视角）
+function renderHeatmap9() {
+  const el = document.getElementById('heatmap9');
+  if (!el) return;
+  if (!DATA.pitches || !DATA.pitches.length) {
+    el.innerHTML = `<div class="empty">${t('c_need9')}</div>`;
+    return;
+  }
+  // 统计
+  const counts = { strike:{}, ball:{} };
+  DATA.pitches.forEach(p => {
+    const k = p.isStrike ? 'strike' : 'ball';
+    counts[k][p.location] = (counts[k][p.location]||0) + 1;
+  });
+  const maxStrike = Math.max(1, ...Object.values(counts.strike));
+  const maxBall = Math.max(1, ...Object.values(counts.ball));
+  const grid = document.createElement('div');
+  grid.className = 'pitch-grid';
+  for (let i=0; i<25; i++) {
+    const cell = document.createElement('div');
+    const isS = isStrike(i);
+    const cnt = isS ? (counts.strike[i]||0) : (counts.ball[i]||0);
+    cell.className = 'pitch-cell ' + (isS ? 'strike' : 'ball');
+    if (cnt > 0) {
+      cell.classList.add('hit-' + (isS?'strike':'ball'));
+      // 半透明：让频次不同产生深浅
+      const ratio = isS ? cnt/maxStrike : cnt/maxBall;
+      cell.style.opacity = 0.5 + 0.5*ratio;
+    } else {
+      cell.style.opacity = 0.4;
+    }
+    cell.innerHTML = `<span class="cnt">${cnt||''}</span><span class="pos">${i+1}</span>`;
+    grid.appendChild(cell);
+  }
+  el.innerHTML = '';
+  el.appendChild(grid);
+  // caption
+  const cap = document.createElement('div');
+  cap.className = 'legend-9';
+  const totS = Object.values(counts.strike).reduce((s,n)=>s+n,0);
+  const totB = Object.values(counts.ball).reduce((s,n)=>s+n,0);
+  cap.innerHTML = `${LANG==='zh'?'好球':'Strike'} <b style="color:#16a34a">${totS}</b> · ${LANG==='zh'?'坏球':'Ball'} <b style="color:#dc2626">${totB}</b> · ${LANG==='zh'?'命中率':'Hit %'} <b>${totS+totB?Math.round(totS/(totS+totB)*100):0}%</b>`;
+  el.appendChild(cap);
+}
+
+// v6 设备数据曲线（按设备聚合）
+function renderDeviceChart() {
+  const data = DATA.deviceLogs || [];
+  if (data.length < 1) return '';
+  const W=320, H=180, pad=30;
+  const x = i => data.length===1 ? W/2 : pad + (W-2*pad) * (i/(data.length-1));
+  let g = '';
+  for (let i=0;i<=4;i++) { const y=pad+(H-2*pad)*i/4; g += `<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#e5e7eb" stroke-width=".5"/>`; }
+  // 转速
+  const spins = data.filter(d=>d.spinRate).map(d=>d.spinRate);
+  if (spins.length >= 2) {
+    const maxS = Math.max(...spins), minS = Math.min(...spins);
+    const yS = v => H-pad-(H-2*pad)*((v-minS)/(maxS-minS||1));
+    const pts = data.map((d,i)=> d.spinRate ? `${x(i)},${yS(d.spinRate)}` : null).filter(p=>p).join(' ');
+    if (pts) g += `<polyline points="${pts}" fill="none" stroke="#dc2626" stroke-width="2"/>`;
+    data.forEach((d,i)=>{ if (d.spinRate) g += `<circle cx="${x(i)}" cy="${yS(d.spinRate)}" r="3" fill="#dc2626"/>`; });
+  }
+  // 偏移
+  const breaks = data.filter(d=>d.break!=null).map(d=>d.break);
+  if (breaks.length >= 2) {
+    const maxB = Math.max(...breaks, 0), minB = Math.min(...breaks, 0);
+    const yB = v => H-pad-(H-2*pad)*((v-minB)/(maxB-minB||1));
+    const pts = data.map((d,i)=> d.break!=null ? `${x(i)},${yB(d.break)}` : null).filter(p=>p).join(' ');
+    if (pts) g += `<polyline points="${pts}" fill="none" stroke="#0891b2" stroke-width="2" stroke-dasharray="3 3"/>`;
+    data.forEach((d,i)=>{ if (d.break!=null) g += `<circle cx="${x(i)}" cy="${yB(d.break)}" r="3" fill="#0891b2"/>`; });
+  }
+  return g;
+}
+
+function renderSvgChart(mode) {
+  const data = DATA.logs;
+  if (data.length < 2) return `<text x="160" y="100" text-anchor="middle" fill="#94a3b8" font-size="13">${t('c_need2')}</text>`;
+  const W=320, H=200, pad=30;
+  const x = i => pad + (W-2*pad) * (i/(data.length-1));
+  let g = '';
+  for (let i=0;i<=4;i++) { const y=pad+(H-2*pad)*i/4; g += `<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#e5e7eb" stroke-width=".5"/>`; }
+  if (mode==='dual') {
+    const maxS=Math.max(...data.map(l=>l.speed),85), minS=Math.min(...data.map(l=>l.speed),75);
+    const yS=v=>H-pad-(H-2*pad)*((v-minS)/(maxS-minS||1));
+    const yM=v=>H-pad-(H-2*pad)*((v-1)/4);
+    g += `<polyline points="${data.map((l,i)=>`${x(i)},${yS(l.speed)}`).join(' ')}" fill="none" stroke="#dc2626" stroke-width="2.5"/>`;
+    data.forEach((l,i)=>{ g += `<circle cx="${x(i)}" cy="${yS(l.speed)}" r="4" fill="#dc2626" stroke="#fff" stroke-width="1.5"/><text x="${x(i)}" y="${yS(l.speed)-8}" text-anchor="middle" font-size="9" fill="#dc2626" font-weight="700">${l.speed}</text>`; });
+    g += `<polyline points="${data.map((l,i)=>`${x(i)},${yM(l.mood*1.8)}`).join(' ')}" fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-dasharray="4 3"/>`;
+    data.forEach((l,i)=>{ g += `<circle cx="${x(i)}" cy="${yM(l.mood*1.8)}" r="3.5" fill="#7c3aed" stroke="#fff" stroke-width="1.5"/>`; });
+  } else if (mode==='bat') {
+    const bats = data.map(l=>calcBatting(l.hits,l.atBats));
+    const maxB = Math.max(...bats.filter(b=>b!=null),0.5);
+    const minB = 0;
+    const yB = v => v==null ? null : H-pad-(H-2*pad)*((v-minB)/(maxB-minB||1));
+    const maxP = Math.max(...data.map(l=>l.pitchCount||0),100);
+    const yP = v => H-pad-(H-2*pad)*(v/maxP);
+    const batPts = data.map((l,i)=>{ const v=yB(calcBatting(l.hits,l.atBats)); return v==null?null:`${x(i)},${v}`; }).filter(p=>p).join(' ');
+    if (batPts) g += `<polyline points="${batPts}" fill="none" stroke="#16a34a" stroke-width="2.5"/>`;
+    data.forEach((l,i)=>{ const v=yB(calcBatting(l.hits,l.atBats)); if (v!=null) g += `<circle cx="${x(i)}" cy="${v}" r="4" fill="#16a34a" stroke="#fff" stroke-width="1.5"/>`; });
+    g += `<polyline points="${data.map((l,i)=>`${x(i)},${yP(l.pitchCount||0)}`).join(' ')}" fill="none" stroke="#0891b2" stroke-width="2.5" stroke-dasharray="3 3"/>`;
+    data.forEach((l,i)=>{ g += `<circle cx="${x(i)}" cy="${yP(l.pitchCount||0)}" r="3.5" fill="#0891b2" stroke="#fff" stroke-width="1.5"/>`; });
+  }
+  data.forEach((l,i)=>{ g += `<text x="${x(i)}" y="${H-pad+14}" text-anchor="middle" font-size="8" fill="#7a8aa1">${l.date.slice(5)}</text>`; });
+  return g;
+}
+
+function renderSOChart() {
+  const data = DATA.logs;
+  if (data.length < 1) return `<text x="160" y="90" text-anchor="middle" fill="#94a3b8" font-size="13">${t('c_need2')}</text>`;
+  const W=320, H=180, pad=30;
+  const x = i => data.length===1 ? W/2 : pad + (W-2*pad) * (i/(data.length-1));
+  let g = '';
+  for (let i=0;i<=4;i++) { const y=pad+(H-2*pad)*i/4; g += `<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#e5e7eb" stroke-width=".5"/>`; }
+  const maxSO = Math.max(...data.map(l=>l.strikeout||0), 5);
+  const ySO = v => H-pad-(H-2*pad)*(v/maxSO);
+  const barW = Math.max(6, (W-2*pad)/data.length * 0.6);
+  data.forEach((l,i)=>{
+    const v = l.strikeout||0;
+    if (v>0) {
+      g += `<rect x="${x(i)-barW/2}" y="${ySO(v)}" width="${barW}" height="${H-pad-ySO(v)}" fill="#dc2626" opacity=".7" rx="2"/>`;
+      g += `<text x="${x(i)}" y="${ySO(v)-4}" text-anchor="middle" font-size="9" fill="#dc2626" font-weight="700">${v}</text>`;
+    }
+  });
+  data.forEach((l,i)=>{ g += `<text x="${x(i)}" y="${H-pad+14}" text-anchor="middle" font-size="8" fill="#7a8aa1">${l.date.slice(5)}</text>`; });
+  return g;
+}
+
+function renderBodyChart() {
+  const b = [...DATA.bodyLogs].sort((a,b)=>a.date.localeCompare(b.date));
+  if (b.length < 1) return `<text x="160" y="90" text-anchor="middle" fill="#94a3b8" font-size="13">${t('c_need_body')}</text>`;
+  const W=320, H=180, pad=30;
+  const x = i => b.length===1 ? W/2 : pad + (W-2*pad) * (i/(b.length-1));
+  let g = '';
+  for (let i=0;i<=4;i++) { const y=pad+(H-2*pad)*i/4; g += `<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#e5e7eb" stroke-width=".5"/>`; }
+  const maxH = Math.max(...b.map(r=>r.height),160), minH = Math.min(...b.map(r=>r.height),140);
+  const maxW = Math.max(...b.map(r=>r.weight),50), minW = Math.min(...b.map(r=>r.weight),30);
+  const yH = v => H-pad-(H-2*pad)*((v-minH)/(maxH-minH||1));
+  const yW = v => H-pad-(H-2*pad)*((v-minW)/(maxW-minW||1));
+  g += `<polyline points="${b.map((r,i)=>`${x(i)},${yH(r.height)}`).join(' ')}" fill="none" stroke="#0891b2" stroke-width="2.5"/>`;
+  b.forEach((r,i)=>{ g += `<circle cx="${x(i)}" cy="${yH(r.height)}" r="4" fill="#0891b2" stroke="#fff" stroke-width="1.5"/><text x="${x(i)}" y="${yH(r.height)-8}" text-anchor="middle" font-size="8" fill="#0891b2" font-weight="700">${r.height}</text>`; });
+  g += `<polyline points="${b.map((r,i)=>`${x(i)},${yW(r.weight)}`).join(' ')}" fill="none" stroke="#7c3aed" stroke-width="2.5" stroke-dasharray="3 3"/>`;
+  b.forEach((r,i)=>{ g += `<circle cx="${x(i)}" cy="${yW(r.weight)}" r="3.5" fill="#7c3aed" stroke="#fff" stroke-width="1.5"/>`; });
+  b.forEach((r,i)=>{ g += `<text x="${x(i)}" y="${H-pad+14}" text-anchor="middle" font-size="8" fill="#7a8aa1">${r.date.slice(5)}</text>`; });
+  return g;
+}
+
+// ========== 反思模块 ==========
+function reflectKeywordSummary() {
+  const recent = DATA.reflections.slice(-10);
+  if (recent.length < 3) return null;
+  const stopWords = new Set(['的','了','是','我','你','他','要','在','和','与','也','有','会','能','到','要','去','做','对','比','上','下','中','还','就','把','被','让','但','又','或','一','二','三']);
+  function tokenize(text) {
+    if (!text) return [];
+    const words = [];
+    const cn = text.match(/[\u4e00-\u9fa5]+/g) || [];
+    cn.forEach(seg => {
+      for (let i=0; i<seg.length-1; i++) {
+        const w = seg.slice(i, i+2);
+        if (!stopWords.has(w)) words.push(w);
+      }
+    });
+    const en = text.match(/[a-zA-Z]+/g) || [];
+    en.forEach(w => { if (w.length>2) words.push(w.toLowerCase()); });
+    return words;
+  }
+  const buckets = { keep: {}, improve: {}, highlight: {} };
+  recent.forEach(r => {
+    ['keep','improve','highlight'].forEach(k => {
+      tokenize(r[k]).forEach(w => {
+        buckets[k][w] = (buckets[k][w] || 0) + 1;
+      });
+    });
+  });
+  function topN(obj, n=5) {
+    return Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n).filter(e=>e[1]>=2);
+  }
+  return {
+    keep: topN(buckets.keep),
+    improve: topN(buckets.improve),
+    highlight: topN(buckets.highlight)
+  };
+}
+
+function saveReflection() {
+  if (!reflectForm.keep && !reflectForm.improve && !reflectForm.highlight) {
+    toast(LANG==='zh'?'三问至少填一题':'Fill at least one');
+    return;
+  }
+  DATA.reflections.push({id: Date.now(), ...reflectForm});
+  saveData(DATA);
+  reflectForm = { date: new Date().toISOString().slice(0,10), type:'train', keep:'', improve:'', highlight:'', source:'self' };
+  toast('✓ '+(LANG==='zh'?'反思已保存':'Saved')); render();
+}
+
+function deleteReflection(id) {
+  if (!confirm(t('yes')+'?')) return;
+  DATA.reflections = DATA.reflections.filter(r => r.id != id);
+  saveData(DATA); render();
+}
+
+function renderReview(s) {
+  const recent = DATA.logs.slice(-5);
+  const avgSp = recent.length ? Math.round(recent.reduce((s,l)=>s+l.speed,0)/recent.length) : 0;
+  const avgMo = recent.length ? (recent.reduce((s,l)=>s+l.mood,0)/recent.length).toFixed(1) : 0;
+  const allBats = recent.map(l=>calcBatting(l.hits,l.atBats)).filter(b=>b!=null);
+  const avgBat = allBats.length ? (allBats.reduce((s,b)=>s+b,0)/allBats.length) : null;
+  const totalP = recent.reduce((s,l)=>s+(l.pitchCount||0),0);
+  const totalSO = recent.reduce((s,l)=>s+(l.strikeout||0),0);
+  const tags = [];
+  if (avgSp >= 80) tags.push(LANG==='zh'?'⚡ 球速破 80':'⚡ Speed 80+');
+  if (avgSp >= 82) tags.push(LANG==='zh'?'🔥 82+ 区间':'🔥 82+ zone');
+  if (avgMo >= 4) tags.push(LANG==='zh'?'💪 信心稳定':'💪 Steady');
+  if (avgBat!=null && avgBat >= 0.4) tags.push(LANG==='zh'?'🥇 打击 4 成':'🥇 Batting .400');
+  if (totalSO >= 3) tags.push(LANG==='zh'?'⚡ '+totalSO+' 三振':'⚡ '+totalSO+' K');
+  if (DATA.reflections.length >= 3) tags.push(LANG==='zh'?'📝 反思 '+DATA.reflections.length+' 次':'📝 '+DATA.reflections.length+' reflections');
+
+  const reviewQuote = t('review_q', {s: avgSp, b: avgBat!=null?fmtBat(avgBat):'—', c: Math.round(avgMo)});
+  const reflectList = [...DATA.reflections].sort((a,b)=>b.date.localeCompare(a.date));
+  const reflectKw = reflectKeywordSummary();
+
+  s.innerHTML = `
+    ${warningCardHTML()}
+    <div class="h-screen">${t('rev_title')}</div>
+    <div class="sub-screen">${t('rev_sub')}</div>
+
+    <div class="card" style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-color:#fcd34d">
+      <h3 style="color:#92400e">${t('reflect_title')}</h3>
+      <div class="sub-screen" style="margin-bottom:10px;color:#a16207">${t('reflect_sub')}</div>
+      <div class="row" style="margin-bottom:8px">
+        <div class="field"><label>${t('date')}</label><input type="date" id="rf_date" value="${reflectForm.date}"></div>
+      </div>
+      <div class="seg" id="rf_type" style="margin-bottom:8px">
+        <div class="seg-item ${reflectForm.type==='train'?'on':''}" data-v="train">${t('reflect_train')}</div>
+        <div class="seg-item ${reflectForm.type==='match'?'on':''}" data-v="match">${t('reflect_match')}</div>
+      </div>
+      <div class="reflect-q">
+        <div class="q-label">${t('q_keep')}<button class="btn mic mini" id="mic_keep" style="margin-left:auto" onclick="startVoice('keep')">${t('mic_idle')}</button></div>
+        <textarea id="f_keep" placeholder="${LANG==='zh'?'说或写：今天要继续保持的习惯/动作是什么？':'Speak: what to keep doing?'}">${reflectForm.keep}</textarea>
+      </div>
+      <div class="reflect-q">
+        <div class="q-label">${t('q_improve')}<button class="btn mic mini" id="mic_improve" style="margin-left:auto" onclick="startVoice('improve')">${t('mic_idle')}</button></div>
+        <textarea id="f_improve" placeholder="${LANG==='zh'?'说或写：下次要立刻改掉的是什么？':'Speak: what to fix next time?'}">${reflectForm.improve}</textarea>
+      </div>
+      <div class="reflect-q">
+        <div class="q-label">${t('q_highlight')}<button class="btn mic mini" id="mic_highlight" style="margin-left:auto" onclick="startVoice('highlight')">${t('mic_idle')}</button></div>
+        <textarea id="f_highlight" placeholder="${LANG==='zh'?'说或写：今天最值得记住的一刻？':'Speak: today\'s biggest moment?'}">${reflectForm.highlight}</textarea>
+      </div>
+      <button class="btn" id="saveRf" style="background:linear-gradient(135deg,#92400e,#f59e0b)">${t('reflect_save')}</button>
+    </div>
+
+    <div class="card">
+      <h3>📊 ${LANG==='zh'?'数据快照':'Snapshot'}</h3>
+      <div style="font-size:12px;line-height:1.9;color:#1f3a5f">
+        ${t('rev_avg',{n:recent.length,s:avgSp,m:avgMo})}${avgBat!=null?t('rev_avg_bat',{b:fmtBat(avgBat)}):''}<br>
+        ${t('rev_pitch',{n:totalP})}<br>
+        ${t('rev_so',{n:totalSO})}<br>
+        ${tags.length?t('rev_tags')+tags.join(' · '):t('rev_keep')}
+      </div>
+    </div>
+
+    ${reflectKw ? `<div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
+      <h3 style="color:#1e40af">${t('reflect_kw')}</h3>
+      <div style="margin-top:8px">
+        <div style="font-size:11px;color:#065f46;font-weight:600;margin-bottom:4px">✅ ${t('q_keep').replace('✅ ','')} Top</div>
+        <div class="kw-cloud" style="margin-bottom:10px">${reflectKw.keep.length?reflectKw.keep.map(([w,c])=>`<span class="kw keep">${w}<span class="c">×${c}</span></span>`).join(''):'<span style="font-size:11px;color:#94a3b8">—</span>'}</div>
+        <div style="font-size:11px;color:#991b1b;font-weight:600;margin-bottom:4px">⚠️ ${t('q_improve').replace('⚠️ ','')} Top</div>
+        <div class="kw-cloud" style="margin-bottom:10px">${reflectKw.improve.length?reflectKw.improve.map(([w,c])=>`<span class="kw improve">${w}<span class="c">×${c}</span></span>`).join(''):'<span style="font-size:11px;color:#94a3b8">—</span>'}</div>
+        <div style="font-size:11px;color:#1e40af;font-weight:600;margin-bottom:4px">⭐ ${t('q_highlight').replace('⭐ ','')} Top</div>
+        <div class="kw-cloud">${reflectKw.highlight.length?reflectKw.highlight.map(([w,c])=>`<span class="kw highlight">${w}<span class="c">×${c}</span></span>`).join(''):'<span style="font-size:11px;color:#94a3b8">—</span>'}</div>
+      </div>
+    </div>` : `<div class="card"><div class="empty">${t('reflect_kw_empty')}</div></div>`}
+
+    <div class="card">
+      <h3>${t('reflect_recent')} (${reflectList.length})</h3>
+      ${reflectList.length ? reflectList.slice(0,8).map(r => `
+        <div class="reflect-item">
+          <div class="ri-head">
+            <span>${r.date} · <b>${r.type==='match'?t('match'):t('train')}</b> · <span class="src-pill ${r.source||'self'}">${srcLabel(r.source||'self')}</span></span>
+            <span class="delete-x" data-del-rf="${r.id}">×</span>
+          </div>
+          ${r.keep?`<div class="ri-row"><b>✅</b> ${r.keep}</div>`:''}
+          ${r.improve?`<div class="ri-row"><b>⚠️</b> ${r.improve}</div>`:''}
+          ${r.highlight?`<div class="ri-row"><b>⭐</b> ${r.highlight}</div>`:''}
+        </div>
+      `).join('') : `<div class="empty">${t('reflect_empty')}</div>`}
+    </div>
+
+    <div class="review-card">
+      <h3>${t('rev_weekly')}</h3>
+      <div class="review-quote">${reviewQuote}</div>
+    </div>
+
+    <div class="card">
+      <h3>${t('rev_tomorrow')}</h3>
+      <p style="font-size:13px;line-height:1.7;color:#1f3a5f">
+        ${avgSp < 80 ? t('t1') : ''}
+        ${avgSp >= 80 && avgSp < 82 ? t('t2') : ''}
+        ${avgSp >= 82 ? t('t3') : ''}
+        ${avgBat!=null && avgBat < 0.3 ? '<br>'+t('t4') : ''}
+        ${avgBat!=null && avgBat >= 0.3 && avgBat < 0.5 ? '<br>'+t('t5') : ''}
+        <br>${t('t6')}
+      </p>
+    </div>
+
+    <div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
+      <h3>${t('export_section')}</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:10px">${t('export_sub')}</p>
+      <button class="btn" id="expBtn" style="font-size:12px;padding:10px;margin-bottom:8px">${t('exp_csv')}</button>
+      <button class="btn warn" id="pdfBtn" style="font-size:12px;padding:10px;margin-bottom:8px">${t('exp_pdf')}</button>
+      <button class="btn ghost" id="jsonBtn" style="font-size:12px;padding:10px">${t('exp_json')}</button>
+    </div>
+  `;
+
+  document.getElementById('rf_date').onchange = e => reflectForm.date = e.target.value;
+  document.getElementById('f_keep').oninput = e => reflectForm.keep = e.target.value;
+  document.getElementById('f_improve').oninput = e => reflectForm.improve = e.target.value;
+  document.getElementById('f_highlight').oninput = e => reflectForm.highlight = e.target.value;
+  document.querySelectorAll('#rf_type .seg-item').forEach(el=>{ el.onclick = () => { reflectForm.type = el.dataset.v; render(); }; });
+  document.getElementById('saveRf').onclick = saveReflection;
+  document.querySelectorAll('[data-del-rf]').forEach(el=>{
+    el.onclick = () => deleteReflection(el.dataset.delRf);
+  });
+
+  // 导出按钮（含 v6 设备数据）
+  document.getElementById('expBtn').onclick = () => {
+    let csv = 'date,type,source,opponent,scoreSelf,scoreOpp,result,venue,speed,pitchCount,strike_rate,strikeout,hits,atBats,struckOut,mood,note\n';
+    csv += DATA.logs.map(l=>`${l.date},${l.type},${l.source||'self'},${l.opponent||''},${l.scoreSelf||0},${l.scoreOpp||0},${l.result||''},${l.venue||''},${l.speed},${l.pitchCount||0},${l.strike},${l.strikeout||0},${l.hits||0},${l.atBats||0},${l.struckOut||0},${l.mood},"${(l.note||'').replace(/"/g,'""')}"`).join('\n');
+    csv += '\n\n# 反思\ndate,type,source,keep,improve,highlight\n';
+    csv += DATA.reflections.map(r=>`${r.date},${r.type},${r.source||'self'},"${(r.keep||'').replace(/"/g,'""')}","${(r.improve||'').replace(/"/g,'""')}","${(r.highlight||'').replace(/"/g,'""')}"`).join('\n');
+    if ((DATA.pitches||[]).length) {
+      csv += '\n\n# 单球记录\ndate,speed_kmh,is_strike,zone_index,source\n';
+      csv += DATA.pitches.map(p=>`${p.date},${p.speed},${p.isStrike?1:0},${p.location+1},${p.source||'self'}`).join('\n');
+    }
+    if ((DATA.deviceLogs||[]).length) {
+      csv += '\n\n# 设备数据 (Rapsodo / Blast Motion)\ndate,source,speed_kmh,spin_rpm,break_in,is_strike\n';
+      csv += DATA.deviceLogs.map(d=>`${d.date},${d.source},${d.speed||''},${d.spinRate||''},${d.break!=null?d.break:''},${d.isStrike!=null?(d.isStrike?1:0):''}`).join('\n');
+    }
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ellie_baseball_log_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    toast('✓ CSV '+(LANG==='zh'?'已下载':'downloaded'));
+  };
+  document.getElementById('pdfBtn').onclick = exportPDF;
+  document.getElementById('jsonBtn').onclick = () => {
+    const blob = new Blob([JSON.stringify(DATA,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ellie_baseball_backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    toast('✓ JSON '+(LANG==='zh'?'已下载':'downloaded'));
+  };
+}
+
+function buildPrintHTML() {
+  const sp = latestSpeed();
+  const lv = levelOf(sp);
+  const mo = avgMood();
+  const last = DATA.logs[DATA.logs.length-1];
+  const bat = last ? calcBatting(last.hits, last.atBats) : null;
+  const age = calcAge(DATA.profile.birthdate);
+  const body = latestBody();
+  const bmi = body ? calcBMI(body.height, body.weight) : null;
+  const recent = DATA.logs.slice(-5);
+  const avgSp = recent.length ? Math.round(recent.reduce((s,l)=>s+l.speed,0)/recent.length) : 0;
+  const avgMoVal = recent.length ? (recent.reduce((s,l)=>s+l.mood,0)/recent.length).toFixed(1) : 0;
+  const allBats = recent.map(l=>calcBatting(l.hits,l.atBats)).filter(b=>b!=null);
+  const avgBat = allBats.length ? (allBats.reduce((s,b)=>s+b,0)/allBats.length) : null;
+  const totalP = DATA.logs.reduce((s,l)=>s+(l.pitchCount||0),0);
+  const totalSO = DATA.logs.reduce((s,l)=>s+(l.strikeout||0),0);
+  const wins = DATA.logs.filter(l=>l.result==='win').length;
+  const losses = DATA.logs.filter(l=>l.result==='loss').length;
+
+  const dualSvg = `<svg viewBox="0 0 320 200">${renderSvgChart('dual')}</svg>`;
+  const bodySvg = `<svg viewBox="0 0 320 180">${renderBodyChart()}</svg>`;
+  const batSvg = DATA.logs.length>=2 ? `<svg viewBox="0 0 320 200">${renderSvgChart('bat')}</svg>` : '';
+  const soSvg = DATA.logs.length>=1 ? `<svg viewBox="0 0 320 180">${renderSOChart()}</svg>` : '';
+  // v6：9宫格热点图 + 设备数据曲线
+  const heatmapSvg = (DATA.pitches||[]).length ? `<div id="printHeatmap"></div><script>renderPrintHeatmap()</script>` : '';
+  const deviceSvg = (DATA.deviceLogs||[]).length ? `<svg viewBox="0 0 320 180">${renderDeviceChart()}</svg>` : '';
+
+  const reviewQuote = t('review_q', {s: avgSp, b: avgBat!=null?fmtBat(avgBat):'—', c: Math.round(avgMoVal)});
+
+  const reflectRecent = [...DATA.reflections].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  const reflectHTML = reflectRecent.length ? `
+    <h2>${t('pr_reflect')}</h2>
+    ${reflectRecent.map(r => `<div class="box" style="margin-bottom:8px">
+      <div style="font-size:11px;color:#64748b;margin-bottom:4px"><b>${r.date}</b> · ${r.type==='match'?t('match'):t('train')} · ${srcLabel(r.source||'self')}</div>
+      ${r.keep?`<div style="font-size:11px;line-height:1.6;margin-bottom:3px"><b>✅</b> ${r.keep}</div>`:''}
+      ${r.improve?`<div style="font-size:11px;line-height:1.6;margin-bottom:3px"><b>⚠️</b> ${r.improve}</div>`:''}
+      ${r.highlight?`<div style="font-size:11px;line-height:1.6"><b>⭐</b> ${r.highlight}</div>`:''}
+    </div>`).join('')}
+  ` : '';
+
+  // 9宫格热点图打印版（pure HTML）
+  let heatmapHTML = '';
+  if ((DATA.pitches||[]).length) {
+    const counts = { strike:{}, ball:{} };
+    DATA.pitches.forEach(p => {
+      const k = p.isStrike ? 'strike' : 'ball';
+      counts[k][p.location] = (counts[k][p.location]||0) + 1;
+    });
+    let cells = '';
+    for (let i=0; i<25; i++) {
+      const sC = counts.strike[i]||0;
+      const bC = counts.ball[i]||0;
+      const isS = isStrike(i);
+      let bg = '#f8fafc', color = '#94a3b8';
+      if (isS && sC > 0) { bg = '#16a34a'; color = '#fff'; }
+      else if (!isS && bC > 0) { bg = '#dc2626'; color = '#fff'; }
+      const cnt = isS ? sC : bC;
+      cells += `<div style="aspect-ratio:1;border:1px solid #cbd5e1;display:flex;align-items:center;justify-content:center;background:${bg};color:${color};font-weight:700;font-size:13px">${cnt||''}</div>`;
+    }
+    const totS = Object.values(counts.strike).reduce((s,n)=>s+n,0);
+    const totB = Object.values(counts.ball).reduce((s,n)=>s+n,0);
+    heatmapHTML = `
+      <h2>${t('pr_pitch')}</h2>
+      <div class="box">
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;max-width:280px;margin:auto">
+          ${cells}
+        </div>
+        <div style="text-align:center;font-size:11px;color:#475569;margin-top:6px">
+          ${LANG==='zh'?'好球':'Strike'} <b style="color:#16a34a">${totS}</b> · ${LANG==='zh'?'坏球':'Ball'} <b style="color:#dc2626">${totB}</b> · ${LANG==='zh'?'命中率':'Hit %'} <b>${totS+totB?Math.round(totS/(totS+totB)*100):0}%</b>
+        </div>
+      </div>
+    `;
+  }
+
+  // 设备数据打印版
+  let deviceHTML = '';
+  if ((DATA.deviceLogs||[]).length) {
+    const rows = DATA.deviceLogs.slice(-10).map(d => `<tr>
+      <td>${d.date}</td><td><b>${d.source}</b></td>
+      <td>${d.speed?d.speed+' km/h':'—'}</td>
+      <td>${d.spinRate||'—'}</td>
+      <td>${d.break!=null?d.break+' in':'—'}</td>
+      <td>${d.isStrike!=null?(d.isStrike?'⚾ K':'○ B'):'—'}</td>
+    </tr>`).join('');
+    deviceHTML = `
+      <h2>${t('pr_dev')}</h2>
+      <table>
+        <thead><tr><th>${t('date')}</th><th>Source</th><th>Speed</th><th>Spin (RPM)</th><th>Break (in)</th><th>Result</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  return `
+    <h1>${DATA.profile.name} · ${t('pr_title')}</h1>
+    <div class="sub">${t('pr_sub')} · ${new Date().toISOString().slice(0,10)}</div>
+    <h2>${t('pr_basic')}</h2>
+    <div class="grid2">
+      <div class="box"><div class="lbl">${t('name')}</div><div class="v" style="font-size:16px">${DATA.profile.name}</div></div>
+      <div class="box"><div class="lbl">${t('title')}</div><div class="v" style="font-size:13px">${DATA.profile.title}</div></div>
+    </div>
+    <div class="grid3">
+      <div class="box"><div class="lbl">${t('pr_ages')}</div><div class="v">${age!=null?age:t('fill_birth')}</div></div>
+      <div class="box"><div class="lbl">${t('pr_height')} cm</div><div class="v">${body?body.height:'—'}</div></div>
+      <div class="box"><div class="lbl">${t('pr_weight')} kg</div><div class="v">${body?body.weight:'—'}</div></div>
+    </div>
+    <div class="grid3">
+      <div class="box"><div class="lbl">${t('pr_speed')} (km/h)</div><div class="v" style="color:#dc2626">${sp||'—'}</div></div>
+      <div class="box"><div class="lbl">${t('pr_conf')} /5</div><div class="v" style="color:#7c3aed">${mo?mo.toFixed(1):'—'}</div></div>
+      <div class="box"><div class="lbl">${t('pr_bat')}</div><div class="v" style="color:#16a34a">${bat!=null?fmtBat(bat):'—'}</div></div>
+    </div>
+    <div class="grid3">
+      <div class="box"><div class="lbl">${t('pr_total_p')}</div><div class="v">${totalP}</div></div>
+      <div class="box"><div class="lbl">${t('pr_total_so')}</div><div class="v" style="color:#dc2626">${totalSO}</div></div>
+      <div class="box"><div class="lbl">${LANG==='zh'?'战绩':'W-L'}</div><div class="v" style="font-size:18px">${wins}-${losses}</div></div>
+    </div>
+    <h2>${t('pr_curve')} — ${t('c1')}</h2>
+    <div class="box">${dualSvg}</div>
+    ${batSvg?`<h2>${t('pr_curve')} — ${t('c2')}</h2><div class="box">${batSvg}</div>`:''}
+    ${heatmapHTML}
+    ${deviceSvg?`<h2>${t('pr_curve')} — ${t('c6')}</h2><div class="box">${deviceSvg}</div>`:''}
+    ${soSvg?`<h2>${t('pr_curve')} — ${t('c4')}</h2><div class="box">${soSvg}</div>`:''}
+    ${body?`<h2>${t('pr_curve')} — ${t('c3')}</h2><div class="box">${bodySvg}</div>`:''}
+    <h2>${t('pr_review')}</h2>
+    <div class="box" style="background:linear-gradient(135deg,#1f3a5f,#3b82f6);color:#fff;border:none">
+      <div style="font-size:14px;line-height:1.7;font-style:italic">"${reviewQuote.replace(/^"|"$/g,'')}"</div>
+    </div>
+    ${reflectHTML}
+    ${deviceHTML}
+    <h2>${t('pr_table')}</h2>
+    <table>
+      <thead><tr>
+        <th>${t('date')}</th><th>${t('type')}</th><th>${t('source')}</th>
+        <th>${t('opponent')}</th><th>${t('score')}</th><th>${t('result')}</th>
+        <th>${t('speed')}</th><th>${t('pitch_count')}</th>
+        <th>${t('strike_rate')}</th><th>${t('strikeout')}</th>
+        <th>${t('hits')}/${t('at_bats')}</th><th>${t('struck_out')}</th>
+        <th>${t('mood')}</th>
+      </tr></thead>
+      <tbody>
+        ${DATA.logs.slice(-12).reverse().map(l=>`<tr>
+          <td>${l.date}</td>
+          <td>${l.type==='match'?t('match'):t('train')}</td>
+          <td>${srcLabel(l.source||'self')}</td>
+          <td>${l.opponent||'-'}</td>
+          <td>${l.type==='match'?`${l.scoreSelf||0}-${l.scoreOpp||0}`:'-'}</td>
+          <td>${l.result?resultLabel(l.result):'-'}</td>
+          <td><b>${l.speed}</b></td>
+          <td>${l.pitchCount||0}</td>
+          <td>${l.strike||0}%</td>
+          <td>${l.strikeout||0}</td>
+          <td>${l.hits||0}/${l.atBats||0}</td>
+          <td>${l.struckOut||0}</td>
+          <td>${'⭐'.repeat(l.mood)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="footer">${t('pr_foot')}</div>
+  `;
+}
+
+function exportPDF() {
+  const r = document.getElementById('printReport');
+  r.innerHTML = buildPrintHTML();
+  toast(LANG==='zh'?'正在生成报告…':'Generating…');
+  setTimeout(() => { window.print(); }, 200);
+}
+
+function renderMe(s) {
+  const age = calcAge(DATA.profile.birthdate);
+  const body = latestBody();
+  const bmi = body ? calcBMI(body.height, body.weight) : null;
+  s.innerHTML = `
+    <div class="h-screen">${t('me_title')}</div>
+    <div class="sub-screen">${t('me_sub')}</div>
+    <div class="card">
+      <h3>${t('me_profile')}</h3>
+      <div class="profile-row"><span class="lbl">${t('name')}</span><input type="text" id="p_name" value="${DATA.profile.name}" style="flex:1;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px"></div>
+      <div class="profile-row" style="margin-top:8px"><span class="lbl">${t('title')}</span><input type="text" id="p_title" value="${DATA.profile.title}" style="flex:1;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px"></div>
+      <div class="profile-row" style="margin-top:8px"><span class="lbl">${t('birth')}</span><input type="date" id="p_birth" value="${DATA.profile.birthdate}" style="flex:1;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px"></div>
+      ${age!=null?`<div style="margin-top:10px"><span class="pill">${age} ${t('years')}</span></div>`:`<div style="font-size:11px;color:#94a3b8;margin-top:8px">${t('fill_birth')}</div>`}
+    </div>
+    <div class="card">
+      <h3>${t('me_body')}</h3>
+      ${body?`<div class="stat-row">
+        <div class="stat body"><div class="v">${body.height}</div><div class="l">${t('pr_height')} cm</div></div>
+        <div class="stat body"><div class="v">${body.weight}</div><div class="l">${t('pr_weight')} kg</div></div>
+        <div class="stat body"><div class="v">${bmi||'—'}</div><div class="l">${t('pr_bmi')}</div></div>
+      </div>`:`<div class="empty" style="padding:14px">${t('no_body')}</div>`}
+      <div class="section-title">${t('add_body')}</div>
+      <div class="row">
+        <div class="field"><label>${t('date')}</label><input type="date" id="b_date" value="${bodyForm.date}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>${t('height')}</label><input type="number" id="b_height" min="100" max="220" step="0.5" value="${bodyForm.height}"></div>
+        <div class="field"><label>${t('weight')}</label><input type="number" id="b_weight" min="20" max="150" step="0.1" value="${bodyForm.weight}"></div>
+      </div>
+      <button class="btn" id="saveBody">${t('save')}</button>
+      ${DATA.bodyLogs.length?`<div style="margin-top:12px"><div style="font-size:11px;color:#7a8aa1;margin-bottom:6px">${t('body_hist')}</div>
+        ${[...DATA.bodyLogs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map(r=>`
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12px">
+            <span>${r.date}</span>
+            <span style="color:#1f3a5f">${r.height} cm · ${r.weight} kg · BMI ${calcBMI(r.height,r.weight)||'—'}</span>
+            <span class="delete-x" data-del-body="${r.id}" style="cursor:pointer">×</span>
+          </div>
+        `).join('')}
+      </div>`:''}
+    </div>
+    <div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
+      <h3 style="color:#1e40af">${t('all_data')}</h3>
+      <div style="font-size:12px;color:#475569;line-height:1.8">
+        ${t('n_train')}：<b>${DATA.logs.length}</b> ${LANG==='zh'?'条':' entries'}<br>
+        反思：<b>${DATA.reflections.length}</b> ${LANG==='zh'?'条':' entries'}<br>
+        ${t('n_pitch')}：<b>${(DATA.pitches||[]).length}</b> ${LANG==='zh'?'球':' pitches'}<br>
+        ${t('n_dev')}：<b>${(DATA.deviceLogs||[]).length}</b> ${LANG==='zh'?'条':' rows'}<br>
+        ${t('n_body')}：<b>${DATA.bodyLogs.length}</b> ${LANG==='zh'?'条':' entries'}<br>
+        ${t('earliest')}：<b>${DATA.logs[0]?.date||'—'}</b><br>
+        ${t('streak')}：<b>${DATA.logs.length?Math.ceil((Date.now()-new Date(DATA.logs[0].date))/86400000):0}</b> ${LANG==='zh'?'天':'days'}
+      </div>
+    </div>
+  `;
+  document.getElementById('p_name').onchange = e => { DATA.profile.name = e.target.value; saveData(DATA); toast('✓ '+(LANG==='zh'?'已保存':'Saved')); };
+  document.getElementById('p_title').onchange = e => { DATA.profile.title = e.target.value; saveData(DATA); toast('✓ '+(LANG==='zh'?'已保存':'Saved')); };
+  document.getElementById('p_birth').onchange = e => { DATA.profile.birthdate = e.target.value; saveData(DATA); render(); };
+  document.getElementById('b_date').onchange = e => bodyForm.date = e.target.value;
+  document.getElementById('b_height').oninput = e => bodyForm.height = e.target.value;
+  document.getElementById('b_weight').oninput = e => bodyForm.weight = e.target.value;
+  document.getElementById('saveBody').onclick = () => {
+    const h = +bodyForm.height, w = +bodyForm.weight;
+    if (!h || !w) { toast(t('height')+'/'+t('weight')); return; }
+    DATA.bodyLogs.push({id:Date.now(), date:bodyForm.date, height:h, weight:w});
+    saveData(DATA);
+    bodyForm = { date: new Date().toISOString().slice(0,10), height:'', weight:'' };
+    toast('✓ '+(LANG==='zh'?'已保存':'Saved')); render();
+  };
+  document.querySelectorAll('[data-del-body]').forEach(el=>{
+    el.onclick = () => { if (confirm(t('yes')+'?')) { DATA.bodyLogs = DATA.bodyLogs.filter(r => r.id != el.dataset.delBody); saveData(DATA); render(); } };
+  });
+}
+
+function go(tab) { currentTab = tab; render(); }
+
+setInterval(()=>{ document.getElementById('clk').textContent = new Date().toTimeString().slice(0,5); }, 1000);
+if (LANG === 'en') { document.getElementById('langZh').classList.remove('on'); document.getElementById('langEn').classList.add('on'); document.documentElement.lang = 'en'; }
+render();
+</script>
+</body>
+</html>
