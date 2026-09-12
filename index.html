@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Baseball Growth Coach · 莀安 Demo v8.3 (9宫格+防编造)</title>
+<title>Baseball Growth Coach · 莀安 Demo v8.4 (双语气+叠图+归档)</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -430,6 +430,16 @@ const I18N = {
   ai_extract: { zh:'抽取关键帧（每 100ms 一帧）…', en:'Extracting keyframes (every 100ms)...' },
   ai_pose_detect: { zh:'MediaPipe 姿态估计中…', en:'Detecting poses via MediaPipe...' },
   ai_calc_angle: { zh:'计算关节角度…', en:'Computing joint angles...' },
+  ai_overlay_need: { zh:'姿态叠图生成中，稍等片刻', en:'Overlay still rendering' },
+  ai_overlay_title: { zh:'🎬 关键帧姿态叠图', en:'🎬 Keyframe Pose Overlay' },
+  ai_overlay_sub: { zh:'金色 = 出手瞬间 · 紫色 = 其它帧 · 标注关键角度', en:'Gold = release moment · Purple = other · angles labeled' },
+  ai_overlay_dl: { zh:'⬇ 下载关键帧 PNG', en:'⬇ Download keyframe' },
+  ai_overlay_render: { zh:'🎨 渲染中...', en:'🎨 Rendering...' },
+  ai_support_history: { zh:'📖 AI 历史鼓励话', en:'📖 AI Encouragement History' },
+  ai_support_sub: { zh:'每次 AI 教练分析的鼓励话自动归档。可用作 9/7 面试展示。', en:'Every AI encouragement is auto-archived. Use it for Sept 7 interview.' },
+  ai_support_empty: { zh:'暂无历史鼓励话，分析视频后会自动归档。', en:'No history yet — analyze a video to start.' },
+  ai_scene_train: { zh:'🏋️ 训练', en:'🏋️ Training' },
+  ai_scene_match: { zh:'🏆 比赛', en:'🏆 Match' },
   ai_send: { zh:'📤 发送给 AI 教练', en:'📤 Send to AI Coach' },
   ai_save_review: { zh:'💾 保存到复盘', en:'💾 Save to Reflections' },
   ai_title_result: { zh:'🧑‍🏫 AI 教练分析报告', en:'🧑‍🏫 AI Coach Analysis' },
@@ -558,6 +568,7 @@ function loadData() {
     d.bodyLogs = d.bodyLogs || [];
     d.pitches = d.pitches || [];   // 单球记录
     d.deviceLogs = d.deviceLogs || [];   // CSV 导入的设备数据
+    d.supportNotes = d.supportNotes || [];   // v8.4：AI 历史鼓励话归档
     return d;
   }
   const seed = {
@@ -1818,6 +1829,23 @@ function renderMe(s) {
       </div>
       <div id="llm_test_result" style="margin-top:10px;font-size:12px"></div>
     </div>
+    <!-- v8.4：AI 历史鼓励话归档卡 — 9/7 面试可翻历史 -->
+    <div class="card" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-color:#fcd34d">
+      <h3 style="color:#92400e">${t('ai_support_history')}</h3>
+      <div style="font-size:11px;color:#a16207;margin-bottom:10px;line-height:1.6">${t('ai_support_sub')}</div>
+      ${(DATA.supportNotes||[]).length ? (DATA.supportNotes||[]).slice(0,5).map(n => {
+        const sceneIcon = n.context==='match' ? '🏆' : '🏋️';
+        const src = n.source && n.source.startsWith('cloud:') ? '☁️' : '📐';
+        const actName = n.action==='swing' ? (LANG==='zh'?'打击':'batting') : (LANG==='zh'?'投球':'pitching');
+        return `<div style="background:#fff;border:1px dashed #fbbf24;border-radius:8px;padding:10px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:11px;color:#92400e">${sceneIcon} ${actName} · ${n.date} · ${src}</span>
+            <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:8px">${n.source}</span>
+          </div>
+          <div style="font-size:13px;color:#78350f;font-style:italic;line-height:1.5">"${n.text}"</div>
+        </div>`;
+      }).join('') : `<div style="color:#a16207;font-size:12px;padding:14px;text-align:center">${t('ai_support_empty')}</div>`}
+    </div>
     <div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-color:#7dd3fc">
       <h3 style="color:#1e40af">${t('all_data')}</h3>
       <div style="font-size:12px;color:#475569;line-height:1.8">
@@ -1946,6 +1974,7 @@ async function ensureLandmarker() {
 function openAICoach() {
   AI.state = 'choose-action';
   AI.action = null;
+  AI.context = 'train';
   document.getElementById('aiModal').classList.add('show');
   renderAIStep();
 }
@@ -1985,20 +2014,33 @@ function renderAIStep() {
 }
 
 function step1HTML() {
+  const ctxActive = (v) => `background:${v?(LANG==='zh'?'linear-gradient(135deg,#7c3aed,#a855f7);color:#fff':'linear-gradient(135deg,#7c3aed,#a855f7);color:#fff'):'#1e293b;color:#cbd5e1'};border-color:${v?'transparent':'#475569'}`;
+  const tipText = LANG==='zh' ? '训练=姐姐腔 / 比赛=教练腔，AI 会自动切换鼓励话风格。' : 'Training = sister-tone / Match = coach-tone. AI will switch encouragement tone automatically.';
   return `<div class="step-card">
     <span class="step-num">${t('ai_step1')}</span>
     <div class="opt-grid">
       <div class="opt-btn" data-act="pitch">${t('ai_pitch')}</div>
       <div class="opt-btn" data-act="swing">${t('ai_swing')}</div>
     </div>
-    <p style="color:#94a3b8;font-size:12px;margin-top:14px;line-height:1.6">${t('ai_knee_hint')}</p>
+    <div style="margin-top:14px;font-size:12px;color:#a5b4fc;font-weight:600">${LANG==='zh'?'场景：训练 vs 比赛':'Scene: Training vs Match'}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <div class="opt-btn" id="ctx-train" data-ctx="train" style="${ctxActive(AI.context==='train')}">🏋️ ${LANG==='zh'?'训练':'Training'}</div>
+      <div class="opt-btn" id="ctx-match" data-ctx="match" style="${ctxActive(AI.context==='match')}">🏆 ${LANG==='zh'?'比赛':'Match'}</div>
+    </div>
+    <p style="color:#94a3b8;font-size:11px;margin-top:10px;line-height:1.6">${tipText}</p>
   </div>`;
 }
 function bindStep1() {
-  document.querySelectorAll('#aiRoot .opt-btn').forEach(el => {
+  document.querySelectorAll('#aiRoot .opt-btn[data-act]').forEach(el => {
     el.onclick = () => {
       AI.action = el.dataset.act;
       AI.state = 'choose-source';
+      renderAIStep();
+    };
+  });
+  document.querySelectorAll('#aiRoot .opt-btn[data-ctx]').forEach(el => {
+    el.onclick = () => {
+      AI.context = el.dataset.ctx;
       renderAIStep();
     };
   });
@@ -2139,11 +2181,15 @@ async function runAnalysis() {
   setProg(65, t('ai_pose_detect'));
   // MediaPipe 跑每帧（在原始 video 元素上）
   const poses = [];
+  const landmarksByFrame = [];
   for (let i=0; i<N; i++) {
     const tt = (i+0.5)/N * v.duration;
     await seekVideo(v, tt);
-    const lm = AI.landmarker.detectForVideo(v, tt*1000).landmarks[0] || null;
+    const result = AI.landmarker.detectForVideo(v, tt*1000);
+    const lm = result.landmarks[0] || null;
     poses.push(lm);
+    landmarksByFrame.push({ t: tt, landmarks: lm, idx: i });
+    if (AI.frames[i]) AI.frames[i].landmarks = lm;
     setProg(65 + 25*i/N, `${t('ai_pose_detect')} ${i+1}/${N}`);
   }
   setProg(92, t('ai_calc_angle'));
@@ -2153,6 +2199,12 @@ async function runAnalysis() {
   AI.feedbackSource = 'mock';
   setProg(100, '✓');
   await new Promise(r => setTimeout(r, 350));
+  // v8.4：抽取关键帧姿态叠图（异步、不阻塞）
+  buildOverlayFrames().then(ov => {
+    AI.overlayKey = ov.keyDataUrl;
+    AI.overlayStrip = ov.stripDataUrls;
+    AI.overlayKeyIdx = ov.keyIdx;
+  });
   if (LLM.enabled && LLM.apiKey) {
     AI.state = 'ai-eval';
   } else {
@@ -2193,8 +2245,113 @@ function poseSeriesToAngles(poses) {
     const sm = (sh && rsh) ? mid(sh, rsh) : null;
     const hm = (hp && rhp) ? mid(hp, rhp) : null;
     const trunkTilt = (sm && hm) ? Math.abs(Math.atan2(sm.x-hm.x, sm.y-hm.y) * 180/Math.PI) : null;
-    return { elbow: elbowAngle, hipShoulder: hipShoulderSep, trunkTilt };
+    return { elbow: elbowAngle, hipShoulder: hipShoulderSep, trunkTilt, stance: 0 };
   });
+}
+
+// ===== v8.4 姿态叠图：在原图上画骨架 + 角度标签，返回新图 dataURL =====
+const POSE_CONNECTIONS = [
+  [11,12],[11,13],[13,15],[12,14],[14,16],
+  [11,23],[12,24],[23,24],
+  [23,25],[25,27],[24,26],[26,28],
+  [27,29],[29,31],[28,30],[30,32],
+  [15,17],[15,19],[15,21],[16,18],[16,20],[16,22]
+];
+function drawPoseOverlay(frame, idx, angle, isKey) {
+  return new Promise(resolve => {
+    if (!frame || !frame.dataUrl) { resolve(null); return; }
+    const img = new Image();
+    img.onload = () => {
+      const W = img.width, H = img.height;
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const cx = c.getContext('2d');
+      cx.drawImage(img, 0, 0, W, H);
+      const lm = frame.landmarks;
+      if (lm && lm.length >= 25) {
+        // 骨架线
+        cx.strokeStyle = isKey ? '#fbbf24' : '#a855f7';
+        cx.lineWidth = isKey ? 5 : 3;
+        POSE_CONNECTIONS.forEach(([a,b]) => {
+          if (!lm[a] || !lm[b]) return;
+          cx.beginPath();
+          cx.moveTo(lm[a].x*W, lm[a].y*H);
+          cx.lineTo(lm[b].x*W, lm[b].y*H);
+          cx.stroke();
+        });
+        // 关节点
+        cx.fillStyle = '#fff';
+        [11,12,13,15,14,16,23,24,25,26,27,28].forEach(p => {
+          if (!lm[p] || (lm[p].visibility !== undefined && lm[p].visibility < 0.5)) return;
+          cx.beginPath();
+          cx.arc(lm[p].x*W, lm[p].y*H, isKey?6:4, 0, Math.PI*2);
+          cx.fill();
+        });
+        // 关键帧加重 — 标注角度
+        if (isKey && angle) {
+          const drawLabel = (text, p, bg='#fbbf24', fg='#1e1b4b') => {
+            if (!lm[p]) return;
+            const x = lm[p].x * W, y = lm[p].y * H;
+            cx.font = `bold ${isKey?18:14}px sans-serif`;
+            const tw = cx.measureText(text).width;
+            cx.fillStyle = bg;
+            cx.fillRect(x+8, y-22, tw+12, isKey?28:22);
+            cx.fillStyle = fg;
+            cx.fillText(text, x+14, y-6);
+          };
+          if (angle.elbow != null) drawLabel('肘角 ' + Math.round(angle.elbow) + '°', 13, '#fbbf24', '#1e1b4b');
+          if (angle.hipShoulder != null) drawLabel('髋肩 ' + Math.round(angle.hipShoulder) + '°', 12, '#a78bfa', '#fff');
+          if (angle.trunkTilt != null) drawLabel('躯干 ' + Math.round(angle.trunkTilt) + '°', 11, '#34d399', '#1e1b4b');
+          // 顶部红条 — 标志关键帧
+          cx.fillStyle = '#dc2626';
+          cx.fillRect(0, 0, W, 8);
+          cx.fillStyle = '#fff';
+          cx.font = `bold ${isKey?20:16}px sans-serif`;
+          cx.fillText('KEY FRAME · ' + idx, 12, isKey?36:28);
+        }
+      } else {
+        // 没识别到关键点 — 加"未识别"标
+        cx.fillStyle = 'rgba(0,0,0,0.6)';
+        cx.fillRect(20, 20, W*0.4, 36);
+        cx.fillStyle = '#fca5a5';
+        cx.font = 'bold 18px sans-serif';
+        cx.fillText('⚠ 未识别关键点', 32, 44);
+      }
+      resolve(c.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = () => resolve(null);
+    img.src = frame.dataUrl;
+  });
+}
+
+// 选最关键的一帧（出手瞬间 ≈ 60% 处）画高清图
+async function buildOverlayFrames() {
+  if (!AI.frames || !AI.angles) return { keyDataUrl: null, stripDataUrls: [] };
+  const numFrames = AI.frames.length;
+  const releaseIdx = Math.max(0, Math.floor(numFrames * 0.6) - 1);
+  // 高清关键帧
+  const key = await drawPoseOverlay(AI.frames[releaseIdx], releaseIdx+1, AI.angles[releaseIdx], true);
+  // 4 帧 strip：按时间均匀
+  const indices = [];
+  for (let i=0; i<4; i++) indices.push(Math.floor(i * numFrames / 4));
+  const strip = [];
+  for (const i of indices) {
+    const isKey = i === releaseIdx;
+    const d = await drawPoseOverlay(AI.frames[i], i+1, AI.angles[i], isKey);
+    strip.push({ idx: i+1, dataUrl: d });
+  }
+  return { keyDataUrl: key, stripDataUrls: strip, keyIdx: releaseIdx };
+}
+
+// 提供给 UI 下载关键帧
+function exportOverlayPNG() {
+  if (!AI.overlayKey) { toast(t('ai_overlay_need')); return; }
+  const a = document.createElement('a');
+  a.href = AI.overlayKey;
+  const ts = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+  a.download = `pose_keyframe_${ts}.png.jpg`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  toast('✓ ' + (LANG==='zh'?'已下载关键帧':'Keyframe downloaded'));
 }
 
 function mockCoachEval(angles) {
@@ -2497,25 +2654,50 @@ function buildPrompts(action, angles) {
                             : '';
   const ZH = LANG==='zh';
   const actionName = action==='swing' ? (ZH?'打击':'batting') : (ZH?'投球':'pitching');
+  const isMatch = AI.context === 'match';
+  const sceneName = isMatch ? (ZH?'比赛':'match') : (ZH?'训练':'training');
 
   // 关键约束系统 prompt：禁止编造，禁止套话
-  const sysPrompt = ZH ?
-    `你是12岁香港女孩莀安的棒球姐姐教练。她正在练${actionName}（${numFrames}帧姿态已提取）。\n` +
-    `输出必须遵守的硬规则：\n` +
-    `1. 数据精准原则：所有数字必须严格来自下面的"视频姿态数据"和"近期训练与比赛数据"。如果某项数据没给出，写"暂无该指标数据"，**绝不编造**数字、不要使用"大概""差不多""应该""估计""可能"等模糊词。\n` +
-    `2. 综合原则：从 (a) 视频动作是否一致 (b) 9宫格好球率分布与视频动作的关系 (c) 训练负荷是否合理 (d) 信心与比赛表现变化 四个维度综合。\n` +
-    `3. 语气原则：温柔但严格，像姐姐陪练，不是客服。**严禁**"加油""你真棒""继续努力""最棒的你""棒棒哒""辛苦了"等任何套话。\n` +
-    `4. 鼓励语原则（重要）：encourage 字段要具备 4 个特征 — ①有具体时间点（比如"上周六"或"上次 vs 北区"），②提一件她刚做对的**具体**事（带数字、带日期、带位置编号皆可），③给一个**面向下次**的小约定或小承诺（不是泛泛"继续"），④10-30字内。**好例子**："上周六5个三振你最稳，这次投球稳多了，下次我们练6个敢不敢？" / "9/3 vs 北区你 5 个 K，这次姿势比当时稳，肩部撑住就对了。" / "姐姐留意到你最近早训多投了 20 球，明天休息日一起去海边？"。**反例**："继续加油！""你真棒！"。\n` +
-    `5. 格式原则：严格按JSON输出，不要任何额外文字、Markdown、代码块标记。\n` +
-    `6. 长度原则：每条文字 ≤30字，每条建议要具体到动作或场景。` :
-    `You are a baseball coach for 12-year-old Chan An from Hong Kong, working on ${actionName} (${numFrames} pose frames extracted).\n` +
-    `HARD RULES:\n` +
-    `1. Accuracy: All numbers MUST come from provided data. If missing, write "no data" — NEVER fabricate, never use "around"/"roughly"/"maybe"/"probably".\n` +
-    `2. Synthesis: combine (a) video pose, (b) 9-zone strike-rate vs motion, (c) training-load, (d) confidence trend.\n` +
-    `3. Tone: warm but firm, older-sister-coach. NO cliches ("keep going", "you're amazing", "do your best", etc.).\n` +
-    `4. Encourage principle: encourage MUST contain (i) a specific time anchor (date or match), (ii) one concrete thing she just did right (with a number, position, or date), (iii) a small commitment or invitation for the next session (not generic "continue"). 10-30 chars. Good: "Last Sat you struck out 5 vs North Zone — this pose was steadier than then. Let's hit 6 next time?" Bad: "Keep going! You got this!".\n` +
-    `5. Format: STRICT JSON, no extra text, no markdown fences.\n` +
-    `6. Length: each string ≤30 chars; each tip must be specific to a motion or scene.`;
+  let sysPrompt;
+  if (ZH) {
+    sysPrompt = `你是12岁香港女孩莀安的棒球姐姐教练。她正在${isMatch ? '比赛':'训练'}${actionName}（${numFrames}帧姿态已提取）。\n`;
+    sysPrompt += `【场景】${isMatch ? '**比赛**':'**训练**'}`;
+    sysPrompt += isMatch
+      ? `场景。今天要打的是真刀真枪的对抗，你偏严格、教练腔调，重点是让莀安动作稳定、不慌、不作废。\n`
+      : `场景。今天是练功房时间，你偏温柔、姐姐腔调，重点是让她发现自己的动作特点、自己去试不同感觉。\n`;
+    sysPrompt += `输出必须遵守的硬规则：\n`;
+    sysPrompt += `1. 数据精准原则：所有数字必须严格来自下面的"视频姿态数据"和"近期训练与比赛数据"。如果某项数据没给出，写"暂无该指标数据"，**绝不编造**数字、不要使用"大概""差不多""应该""估计""可能"等模糊词。\n`;
+    sysPrompt += `2. 综合原则：从 (a) 视频动作是否一致 (b) 9宫格好球率分布与视频动作的关系 (c) 训练负荷是否合理 (d) 信心与比赛表现变化 四个维度综合。\n`;
+    sysPrompt += `3. 语气原则（按场景切换）：\n`;
+    if (isMatch) {
+      sysPrompt += `   - 比赛腔：短促有力、像赛前最后一遍热身教练；用"稳住""盯紧""推过去""到位"等动词；**严禁**撒娇式结尾（"好不好""敢不敢"等）。\n`;
+    } else {
+      sysPrompt += `   - 训练腔：陪伴探索式、像姐姐陪练；可以用"试试看""慢慢来""下次我们…"等邀请式结尾；可稍微幽默一点、举生活中的例子。\n`;
+    }
+    sysPrompt += `   - **严禁**"加油""你真棒""继续努力""最棒的你""棒棒哒""辛苦了""没问题的"等任何套话。\n`;
+    sysPrompt += `4. 鼓励语原则（重要）：encourage 字段要具备 4 个特征 — ①有具体时间点（比如"上周六"或"上次 vs 北区"），②提一件她刚做对的**具体**事（带数字、带日期、带位置编号皆可），③给一个**面向下次**的小约定或小承诺（不是泛泛"继续"），④10-30字内。\n`;
+    sysPrompt += `   **好例子**：` + (isMatch
+      ? `比赛："9/3 vs 北区你 5 个 K，今天再投中 1 个低位就是 6 个。" / "上次最后被打穿，今天撑过去了，肩部没塌。" / "控球先稳一格，节奏才踩得住。" / "底角那个位置盯好，最后半局给我看着投。" ` +
+        `训练："上周六5个三振你最稳，这次投球稳多了，下次我们练6个敢不敢？" / "姐姐留意到你最近早训多投了 20 球，明天休息日一起去海边？" / "肘部撑住 1 秒再放，慢一拍节奏明天试试看。"`
+      : `训练："上周六5个三振你最稳，这次投球稳多了，下次我们练6个敢不敢？" / "9/3 vs 北区你 5 个 K，这次姿势比当时稳，肩部撑住就对了。" / "姐姐留意到你最近早训多投了 20 球，明天休息日一起去海边？"` +
+        `比赛（参考用，本次偏训练）："9/3 vs 北区你 5 个 K，今天再投中 1 个低位就是 6 个。"`) + `\n`;
+    sysPrompt += `   **反例**："继续加油！""你真棒！""没事的，加油！"。\n`;
+    sysPrompt += `5. 格式原则：严格按JSON输出，不要任何额外文字、Markdown、代码块标记。\n`;
+    sysPrompt += `6. 长度原则：每条文字 ≤30字，每条建议要具体到动作或场景。`;
+  } else {
+    sysPrompt = `You are a baseball coach for 12-year-old Chan An from Hong Kong, working on ${isMatch?'match':'training'}-${actionName} (${numFrames} pose frames extracted).\n`;
+    sysPrompt += `[Scene] ${isMatch ? '**Match**':'**Training**'} `;
+    sysPrompt += isMatch
+      ? `tone: short, firm, pre-game coach voice; imperative verbs "hold"/"lock"/"drive"/"anchor". No baby talk endings.\n`
+      : `tone: gentle, exploratory, big-sister companion; invitations like "let's try".../maybe a small joke. No baby talk endings like "okay?".\n`;
+    sysPrompt += `HARD RULES:\n`;
+    sysPrompt += `1. Accuracy: All numbers MUST come from provided data. If missing, write "no data" — NEVER fabricate, never use "around"/"roughly"/"maybe"/"probably".\n`;
+    sysPrompt += `2. Synthesis: combine (a) video pose, (b) 9-zone strike-rate vs motion, (c) training-load, (d) confidence trend.\n`;
+    sysPrompt += `3. Tone: switch by scene above. NO cliches ("keep going", "you're amazing", "do your best", "you got this", etc.).\n`;
+    sysPrompt += `4. Encourage principle: encourage MUST contain (i) a specific time anchor (date or match), (ii) one concrete thing she just did right (with a number, position, or date), (iii) a small commitment or invitation for the next session (not generic "continue"). 10-30 chars. Match-scene good: "Last Sat you struck out 5 vs North Zone — today lower-corner 1 more = 6." Training-scene good: "Last Sat your 5 Ks were your steadiest yet. Want to hit 6 next round?" Bad: "Keep going! You got this!".\n`;
+    sysPrompt += `5. Format: STRICT JSON, no extra text, no markdown fences.\n`;
+    sysPrompt += `6. Length: each string ≤30 chars; each tip must be specific to a motion or scene.`;
+  }
 
   const userPrompt = ZH ?
     `## 视频姿态数据\n` +
@@ -2795,12 +2977,43 @@ function resultHTML() {
   `;
 
   // ===== 块 4: 给莀安的话 =====
+  // 训练/比赛场景提示 — 让语气切换可见
+  const sceneTag = AI.context === 'match' ? (ZH?'🏆 比赛场景 · 教练腔':'🏆 Match · Coach-tone') : (ZH?'🏋️ 训练场景 · 姐姐腔':'🏋️ Training · Sister-tone');
   const encourageBlock = `
     <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #f59e0b;border-radius:10px;padding:12px;margin-top:10px;color:#78350f">
-      <div style="font-size:13px;font-weight:600;margin-bottom:6px">${t('ai_section_encourage')}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:13px;font-weight:600">${t('ai_section_encourage')}</span>
+        <span style="background:#f59e0b;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600">${sceneTag}</span>
+      </div>
       <div style="font-size:13px;line-height:1.6;font-style:italic">"${ev.encourage}"</div>
     </div>
   `;
+
+  // ===== 块 5: 关键帧姿态叠图 =====
+  let overlayBlock = '';
+  if (AI.overlayKey) {
+    const stripHtml = (AI.overlayStrip||[]).map(o => o.dataUrl
+      ? `<div style="position:relative;flex:1;border-radius:6px;overflow:hidden;background:#000"><img src="${o.dataUrl}" style="width:100%;height:100%;object-fit:cover"/><span style="position:absolute;top:4px;left:4px;background:#7c3aed;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px">#${o.idx}</span></div>`
+      : `<div style="flex:1;background:#1e293b;border-radius:6px;height:60px"></div>`
+    ).join('');
+    overlayBlock = `
+      <div style="background:#0f172a;border:1px solid #fbbf24;border-radius:10px;padding:10px;margin-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="color:#fde68a;font-size:13px;font-weight:600">${t('ai_overlay_title')}</div>
+          <button onclick="exportOverlayPNG()" style="background:#fbbf24;color:#1e1b4b;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">${t('ai_overlay_dl')}</button>
+        </div>
+        <div style="color:#94a3b8;font-size:11px;margin-bottom:6px">${t('ai_overlay_sub')}</div>
+        <img src="${AI.overlayKey}" style="width:100%;border-radius:6px;background:#000;margin-bottom:6px"/>
+        <div style="display:flex;gap:6px;height:60px">${stripHtml}</div>
+      </div>
+    `;
+  } else if (AI.frames && AI.frames.length > 0) {
+    overlayBlock = `
+      <div style="background:#0f172a;border:1px solid #475569;border-radius:10px;padding:10px;margin-top:10px;text-align:center;color:#94a3b8;font-size:12px">
+        ${t('ai_overlay_render')}
+      </div>
+    `;
+  }
 
   // ===== 折叠：原始姿态曲线（老用户也能看） =====
   const poseGrid = `
@@ -2824,6 +3037,7 @@ function resultHTML() {
     ${compareBlock}
     ${tipsBlock}
     ${encourageBlock}
+    ${overlayBlock}
     ${poseGrid}
     <div style="display:flex;gap:10px;margin-top:14px">
       <button class="opt-btn" style="flex:1;background:#334155" id="aiRedo">${t('ai_back')}</button>
@@ -2869,19 +3083,32 @@ function bindResult() {
     if (ev.zone_note) lines.push(`📍 ${ZH?'9宫格战术':'9-Zone'}: ${ev.zone_note}`);
     if (ev.trend_note) lines.push(`📈 ${ZH?'趋势':'Trend'}: ${ev.trend_note}`);
     if (ev.load_note) lines.push(`⚖️ ${ZH?'负荷':'Load'}: ${ev.load_note}`);
+    const sceneTag = AI.context === 'match' ? (ZH?'🏆比赛':'🏆Match') : (ZH?'🏋️训练':'🏋️Training');
     const r = {
       date: dateStr,
       type: 'train',
       source: AI.feedbackSource==='cloud' ? 'self' : 'self',
-      keep: lines.join(' / '),
+      keep: `${sceneTag} · ` + lines.join(' / '),
       improve: ev.problem.msg + (ev.pose_tips ? `\n🎯 ${ZH?'动作要点':'Pose'}: ${ev.pose_tips.join(' | ')}` : ''),
       highlight: ev.encourage
     };
     DATA.reflections.unshift(r);
+    // v8.4：把鼓励话单独归档到 supportNotes（面试时可翻历史）
+    if (ev.encourage && ev.encourage.trim().length>0) {
+      DATA.supportNotes.unshift({
+        date: dateStr,
+        action: AI.action,
+        context: AI.context,
+        source: AI.feedbackSource==='cloud' ? ('cloud:'+llmLabel()) : 'local',
+        text: ev.encourage
+      });
+      // 最多保留 30 条历史
+      if (DATA.supportNotes.length > 30) DATA.supportNotes.length = 30;
+    }
     saveData(DATA);
     DATA.reflections[0].improve += `\n💡 ${ZH?'综合':'Synthesis'}: ${ev.tips.join(' | ')}`;
     saveData(DATA);
-    toast('✓ ' + (ZH?'已保存到复盘（含综合分析）':'Saved to reflections (with synthesis)'));
+    toast('✓ ' + (ZH?'已保存（含历史鼓励话归档）':'Saved + encouragement archived'));
     closeAICoach();
   };
 }
@@ -2896,7 +3123,7 @@ window.bindAIStartBtn = function() {
 <div id="aiModal">
   <div class="top-bar">
     <button class="x-btn" onclick="closeAICoach()">✕</button>
-    <h3>🤖 AI Video Coach <span class="pill" style="margin-left:8px;background:#7c3aed;color:#f5f3ff">v8.3 9宫格</span></h3>
+    <h3>🤖 AI Video Coach <span class="pill" style="margin-left:8px;background:#7c3aed;color:#f5f3ff">v8.4 双语气</span></h3>
   </div>
   <div class="step-area" id="aiRoot"></div>
   <input type="file" id="aiPicker" accept="video/*" style="display:none" onchange="pickFromAlbum(this.files[0])">
