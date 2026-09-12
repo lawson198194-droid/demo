@@ -1461,8 +1461,7 @@ function buildPrintHTML() {
   const bodySvg = `<svg viewBox="0 0 320 180">${renderBodyChart()}</svg>`;
   const batSvg = DATA.logs.length>=2 ? `<svg viewBox="0 0 320 200">${renderSvgChart('bat')}</svg>` : '';
   const soSvg = DATA.logs.length>=1 ? `<svg viewBox="0 0 320 180">${renderSOChart()}</svg>` : '';
-  // v6：9宫格热点图 + 设备数据曲线
-  const heatmapSvg = (DATA.pitches||[]).length ? `<div id="printHeatmap"></div><script>renderPrintHeatmap()</script>` : '';
+  // v6：设备数据曲线（9宫格热点图见下方 heatmapHTML，纯 HTML 字符串版）
   const deviceSvg = (DATA.deviceLogs||[]).length ? `<svg viewBox="0 0 320 180">${renderDeviceChart()}</svg>` : '';
 
   const reviewQuote = t('review_q', {s: avgSp, b: avgBat!=null?fmtBat(avgBat):'—', c: Math.round(avgMoVal)});
