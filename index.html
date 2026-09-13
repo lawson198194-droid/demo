@@ -419,8 +419,8 @@
 const KEY = 'baseball_growth_coach_v6';
 let LANG = localStorage.getItem('bgc_lang') || 'zh';
 // v9.3：版本标识 —— 用于「你在看的是不是最新版」判断 + 自动更新检测
-const APP_VER = 'v9.3';
-const APP_BUILD = '2026-09-13.0740';
+const APP_VER = 'v9.4';
+const APP_BUILD = '2026-09-13.0815';
 let _lastVerCheck = 0;
 
 // 9宫格位置编号（0-24，5x5）
@@ -445,8 +445,9 @@ const I18N = {
   source: { zh:'数据来源', en:'Logged By' },
   src_self: { zh:'🙋 我', en:'🙋 Self' }, src_coach: { zh:'🧢 教练', en:'🧢 Coach' }, src_parent: { zh:'👨‍👩‍👧 父母', en:'👨‍👩‍👧 Parent' },
   pitch_section: { zh:'📌 投球', en:'📌 Pitch' }, speed: { zh:'球速 (km/h)', en:'Speed (km/h)' }, pitch_count: { zh:'投球数', en:'Pitches' },
-  strike_rate: { zh:'好球率 (%)', en:'Strike Rate (%)' }, strikeout: { zh:'投出三振', en:'Strikeouts Thrown' },
-  bat_section: { zh:'🏏 打击（可选）', en:'🏏 Batting (optional)' }, hits: { zh:'安打', en:'Hits' }, at_bats: { zh:'打数', en:'At-Bats' }, struck_out: { zh:'被三振', en:'Times Struck Out' },
+  strike_rate: { zh:'好球率 (%)', en:'Strike Rate (%)' }, strike_balls: { zh:'好球数', en:'Strikes (count)' }, strikeout: { zh:'投出三振', en:'Strikeouts Thrown' },
+  frv_section: { zh:'📝 复盘（保存记录时一起填）', en:'📝 Review (fill with the record)' },
+  bat_section: { zh:'🏏 打击', en:'🏏 Batting' }, hits: { zh:'安打', en:'Hits' }, at_bats: { zh:'打数', en:'At-Bats' }, struck_out: { zh:'被三振', en:'Times Struck Out' },
   mood: { zh:'信心 (1-5)', en:'Confidence (1-5)' }, note: { zh:'备注', en:'Note' }, note_ph: { zh:'今天投球怎样？或者🎤按住说话', en:"How was today? Or 🎤 hold to talk" },
   loc_btn: { zh:'📍 自动定位球场', en:'📍 Auto-detect field' }, loc_no: { zh:'浏览器不支持定位', en:'Geolocation not supported' },
   loc_denied: { zh:'定位被拒绝，可手动填', en:'Permission denied' }, loc_fail: { zh:'定位失败，重试', en:'Failed, retry' }, loc_ok: { zh:'✓ 已定位', en:'✓ Located' },
@@ -685,7 +686,7 @@ const I18N = {
   gc_import_btn: { zh:'📄 导入比赛数据（GC PDF）', en:'📄 Import GC PDF' },
   gc_import_sub: { zh:'选 GameChanger 导出的比赛 PDF，本机自动识别关键数据（不上传）', en:'Pick a GameChanger match PDF — parsed on-device (never uploaded)' },
   gc_modal_title: { zh:'导入比赛数据（GC PDF）', en:'Import GC PDF' },
-  gc_help: { zh:'选择 GameChanger 导出的比赛 PDF，本机本地解析（不上传任何数据），自动识别日期/比分/投球数等字段，识别不到的可手动补。也可直接粘贴 PDF 里的文字。', en:'Pick a GameChanger match PDF — parsed locally, never uploaded. Date/score/pitches are auto-detected; fill the rest manually. You can also paste PDF text.' },
+  gc_help: { zh:'选择 GameChanger 导出的比赛 PDF，本机本地解析（不上传任何数据）。自动找 LUO CHENAN / ELLIE / LUO 的名字，只导出她一个人的数据；日期/比分等队伍信息全文识别，识别不到的可手动补。也可直接粘贴 PDF 里的文字。', en:'Pick a GameChanger match PDF — parsed locally, never uploaded. It looks for LUO CHENAN / ELLIE / LUO and only imports her stats; team info (date/score) is read from the full text. You can also paste PDF text.' },
   gc_parse: { zh:'🔍 解析预览', en:'🔍 Parse Preview' },
   gc_import: { zh:'✓ 导入为比赛记录', en:'✓ Import as Match' },
   gc_imported: { zh:'已导入为比赛记录', en:'Imported as match record' },
@@ -857,7 +858,7 @@ function saveLLMConfig() {
 let DATA = loadData();
 loadLLMConfig();
 let currentTab = 'home';
-let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:null, strike:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'' };
+let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:null, strike:null, strikeBalls:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'', review:{keep:'',improve:'',highlight:''} };
 let bodyForm = { date: new Date().toISOString().slice(0,10), height:'', weight:'' };
 // v9.3：复盘不再单独成模块 — reviewOpenId 记录当前展开复盘表单的日志 id
 let reviewOpenId = null;
@@ -1204,8 +1205,11 @@ function applyGcParse(parsed) {
   // 填入可编辑表单 + 显示预览
   const pv = document.getElementById('gcPreview');
   pv.style.display = 'block';
-  const found = Object.entries(parsed).filter(([k,v]) => v !== '' && v != null);
-  pv.innerHTML = `<span class="ok">✓ ${t('gc_detected')}</span>
+  const found = Object.entries(parsed).filter(([k,v]) => v !== '' && v != null && k !== 'playerFound');
+  const playerLine = parsed.playerFound
+    ? `<span class="ok">👤 ${LANG==='zh'?'找到球员':'Player'}: <b>${parsed.playerFound}</b></span>\n`
+    : `<span class="err">⚠ ${LANG==='zh'?'没找到 LUO CHENAN / ELLIE / LUO，按全文解析，请人工核对':'Player name not found — parsed whole text, please verify'}</span>\n`;
+  pv.innerHTML = `${playerLine}<span class="ok">✓ ${t('gc_detected')}</span>
     <pre style="margin-top:6px;color:#cbd5e1;font-size:10px">${found.length ? found.map(([k,v]) => `${k}: ${v}`).join('\n') : (LANG==='zh'?'未识别到字段，请手动填写':'No fields detected — fill manually')}</pre>`;
   const set = (id, v) => { const el = document.getElementById(id); if (el && v !== '' && v != null) el.value = v; };
   set('gc_date', parsed.date); set('gc_opponent', parsed.opponent);
@@ -1256,9 +1260,18 @@ async function extractPdfText(file) {
   return txt;
 }
 function parseGcText(text) {
-  // 启发式识别 GC 记分 PDF 常见字段；识别不到留空，由用户手动补
-  const out = { date:'', opponent:'', scoreSelf:'', scoreOpp:'', pitchCount:'', strike:'', strikeout:'', speed:'', hits:'', atBats:'', struckOut:'' };
-  const num = (re) => { const m = text.match(re); return m ? m[1] : ''; };
+  // v9.4：先粗略找球员名字（LUO CHENAN / ELLIE LUO / ELLIE / C LUO / LUO），只导出她的数据
+  const out = { date:'', opponent:'', scoreSelf:'', scoreOpp:'', pitchCount:'', strike:'', strikeout:'', speed:'', hits:'', atBats:'', struckOut:'', playerFound:'' };
+  const NAME_RE = /(LUO\s*CHENAN|CHENAN\s*LUO|ELLIE\s*LUO|LUO\s*ELLIE|ELLIE|C\.?\s*LUO|LUO)/i;
+  const nm = text.match(NAME_RE);
+  let scope = text;   // 找到名字 → 只解析名字附近这一段（她本人的数据行）
+  if (nm) {
+    out.playerFound = nm[1].replace(/\s+/g,' ').trim();
+    const idx = nm.index;
+    scope = text.slice(idx, Math.min(text.length, idx + 280));
+  }
+  // 日期 / 对手 / 比分是全队信息，全文找
+  const num = (re) => { const m = scope.match(re); return m ? m[1] : ''; };
   let m = text.match(/(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
   if (m) out.date = m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
   else { m = text.match(/(\d{1,2})[\/.](\d{1,2})[\/.](20\d{2})/); if (m) out.date = m[3] + '-' + String(m[1]).padStart(2,'0') + '-' + String(m[2]).padStart(2,'0'); }
@@ -1266,6 +1279,7 @@ function parseGcText(text) {
   if (m) out.opponent = m[1].trim();
   m = text.match(/\b(\d{1,2})\s*[-–—]\s*(\d{1,2})\b/);
   if (m) { out.scoreSelf = m[1]; out.scoreOpp = m[2]; }
+  // 个人数据只在她的数据段里找
   out.pitchCount = num(/(?:pitches?|投球数?)[^\d]{0,8}(\d{1,3})/i) || num(/\b(\d{1,3})\s+pitches?\b/i);
   out.strikeout = num(/(?:strikeouts?\s*thrown|投出三振|三振)[^\d]{0,8}(\d{1,2})/i) || num(/\bSO[:\s]+(\d{1,2})\b/);
   out.strike = num(/(?:strike\s*rate|好球率)[^\d]{0,8}(\d{1,3})/i);
@@ -1358,7 +1372,11 @@ function startVoice(field) {
     isRecording = false; updateMicBtn(voiceField);
     if (voiceField) {
       // 同步到表单数据
-      if (voiceField === 'note') form.note = document.getElementById('f_note').value;
+      if (voiceField.indexOf('frv_') === 0) {
+        // v9.4：添加记录表单里的复盘三问 frv_<keep|improve|highlight>
+        const m = voiceField.match(/^frv_(keep|improve|highlight)$/);
+        if (m) { form.review = form.review || {}; form.review[m[1]] = document.getElementById('f_' + voiceField).value; }
+      }
       else if (voiceField.indexOf('rv_') === 0) {
         // v9.3：内联复盘字段 rv_<日志id>_<keep|improve|highlight>
         const m = voiceField.match(/^rv_(\d+)_(keep|improve|highlight)$/);
@@ -1531,8 +1549,11 @@ function renderLog(s) {
           <div class="field"><label>${t('pitch_count')}</label><input type="number" id="f_pitchCount" min="0" max="500" value="${form.pitchCount ?? ''}" placeholder="${LANG==='zh'?'如：60（可空）':'e.g. 60 (optional)'}"></div>
         </div>
         <div class="row">
-          <div class="field"><label>${t('strike_rate')}</label><input type="number" id="f_strike" min="0" max="100" value="${form.strike ?? ''}" placeholder="${LANG==='zh'?'如：70（可空）':'e.g. 70 (optional)'}"></div>
-          <div class="field"><label>${t('strikeout')}</label><input type="number" id="f_strikeout" min="0" max="50" value="${form.strikeout ?? ''}" placeholder="${LANG==='zh'?'如：5（可空）':'e.g. 5 (optional)'}"></div>
+          <div class="field"><label>${t('strike_balls')}</label><input type="number" id="f_strikeBalls" min="0" max="500" value="${form.strikeBalls ?? ''}" placeholder="${LANG==='zh'?'如：42':'e.g. 42'}"></div>
+          <div class="field"><label>${t('strike_rate')}</label><input type="number" id="f_strike" min="0" max="100" value="${form.strike ?? ''}" placeholder="${LANG==='zh'?'自动算出，可改':'Auto-calculated'}"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>${t('strikeout')}</label><input type="number" id="f_strikeout" min="0" max="50" value="${form.strikeout ?? ''}" placeholder="${LANG==='zh'?'如：5':'e.g. 5'}"></div>
         </div>
         <div class="section-title">${t('bat_section')}</div>
         <div class="row">
@@ -1545,10 +1566,14 @@ function renderLog(s) {
           ${[1,2,3,4,5].map(n=>`<div class="seg-item ${form.mood===n?'on':''}" data-v="${n}">${'⭐'.repeat(n)}</div>`).join('')}
         </div>
       </div>
-      <div class="field"><label>${t('note')}</label>
-        <textarea id="f_note" placeholder="${t('note_ph')}">${form.note}</textarea>
-        <button class="btn mic mini" id="mic_note" style="margin-top:6px" onclick="startVoice('note')">${t('mic_idle')}</button>
-      </div>
+      <div class="section-title">${t('frv_section')}</div>
+      ${['keep','improve','highlight'].map(k => `
+        <div class="reflect-q" style="margin-bottom:8px">
+          <div class="q-label" style="display:flex;align-items:center;gap:6px">${t('q_'+k)}
+            <button class="btn mic mini" id="mic_frv_${k}" style="margin-left:auto" onclick="startVoice('frv_${k}')">${t('mic_idle')}</button>
+          </div>
+          <textarea id="f_frv_${k}" style="font-size:12px" placeholder="${LANG==='zh'?'说或写都可以':'Speak or type'}">${(form.review && form.review[k]) || ''}</textarea>
+        </div>`).join('')}
       <button class="btn" id="saveBtn">${t('save')}</button>
     </div>
     <div class="card">
@@ -1592,6 +1617,8 @@ function renderLogList() {
     const bat = calcBatting(l.hits, l.atBats);
     const rv = l.review;
     const open = String(reviewOpenId) === String(l.id);
+    // v9.4：备注没了，标题用复盘第一行兜底
+    const title = l.note || (rv && rv.keep ? rv.keep.split('\n')[0].slice(0,30) : '');
     // v9.3：复盘跟在每条记录后面（不再单独开模块）
     const rvBlock = `
       <div style="margin-top:6px;border-top:1px dashed #e2e8f0;padding-top:6px">
@@ -1612,7 +1639,7 @@ function renderLogList() {
       <div class="log-date">${l.date.slice(5)}<br><span style="color:#94a3b8">${l.type==='match'?t('match'):t('train')}</span></div>
       <div class="log-info" style="flex:1;min-width:60%">
         <div class="top" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          ${esc(l.note)||'(no note)'}
+          ${title ? esc(title) : '<span style="color:#94a3b8">—</span>'}
           <span class="src-pill ${l.source||'self'}">${srcLabel(l.source||'self')}</span>
           ${l.type==='match' && l.result?`<span class="badge ${l.result}">${resultLabel(l.result)}</span>`:''}
         </div>
@@ -1632,12 +1659,15 @@ function saveLog() {
   // v8.5：去掉空字段的默认值 0，让数据为真"可空"保存进 DATA.logs
   const cleaned = { id: Date.now() };
   ['date','type','source','note','location','opponent','result','venue'].forEach(k => cleaned[k] = form[k]);
-  ['speed','strike','mood','pitchCount','strikeout','hits','atBats','struckOut','scoreSelf','scoreOpp','pitcherSO','pitcherHits'].forEach(k => {
+  ['speed','strike','strikeBalls','mood','pitchCount','strikeout','hits','atBats','struckOut','scoreSelf','scoreOpp','pitcherSO','pitcherHits'].forEach(k => {
     if (form[k] !== null && form[k] !== '' && !Number.isNaN(form[k])) cleaned[k] = form[k];
   });
+  // v9.4：复盘三问随记录一起保存
+  const frv = form.review || {};
+  if (frv.keep || frv.improve || frv.highlight) cleaned.review = { keep:frv.keep||'', improve:frv.improve||'', highlight:frv.highlight||'' };
   DATA.logs.push(cleaned);
   saveData(DATA);
-  form = { date: new Date().toISOString().slice(0,10), type: form.type, source: form.source, speed:null, strike:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'' };
+  form = { date: new Date().toISOString().slice(0,10), type: form.type, source: form.source, speed:null, strike:null, strikeBalls:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'', review:{keep:'',improve:'',highlight:''} };
   toast('✓ '+(LANG==='zh'?'已记录为训练/比赛':'Saved as train/match')); render();
 }
 
@@ -1652,12 +1682,35 @@ function bindFormEvents() {
   };
   numericField('f_speed', 'speed');
   numericField('f_strike', 'strike');
+  // v9.4：好球数 + 投球数 → 自动算好球率
+  const autoStrike = () => {
+    if (form.strikeBalls != null && form.pitchCount != null && form.pitchCount > 0) {
+      form.strike = Math.round(form.strikeBalls / form.pitchCount * 100);
+      const el = document.getElementById('f_strike');
+      if (el) el.value = form.strike;
+    }
+  };
+  numericField('f_strikeBalls', 'strikeBalls');
+  document.getElementById('f_strikeBalls').onchange = e => {
+    const v = e.target.value;
+    form.strikeBalls = (v === '' || v == null) ? null : (Number.isNaN(+v) ? null : +v);
+    autoStrike();
+  };
   numericField('f_pitchCount', 'pitchCount');
+  document.getElementById('f_pitchCount').onchange = e => {
+    const v = e.target.value;
+    form.pitchCount = (v === '' || v == null) ? null : (Number.isNaN(+v) ? null : +v);
+    autoStrike();
+  };
   numericField('f_strikeout', 'strikeout');
   numericField('f_hits', 'hits');
   numericField('f_atBats', 'atBats');
   numericField('f_struckOut', 'struckOut');
-  document.getElementById('f_note').oninput = e => form.note = e.target.value;
+  // v9.4：复盘三问（说或写）
+  ['keep','improve','highlight'].forEach(k => {
+    const el = document.getElementById('f_frv_' + k);
+    if (el) el.oninput = e => { form.review = form.review || {}; form.review[k] = e.target.value; };
+  });
   if (document.getElementById('f_opponent')) {
     document.getElementById('f_opponent').oninput = e => form.opponent = e.target.value;
     numericField('f_scoreSelf', 'scoreSelf');
