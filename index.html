@@ -417,10 +417,13 @@
 
 <script>
 const KEY = 'baseball_growth_coach_v6';
+// v9.9：教练检查表字段（v9.8 三项 + 教练视频新增两项：落地时肚脐对捕手 / 收尾手落屁股后）
+const CC_KEYS = ['extRot','pronation','scapula','navelPlate','backFinish'];
+const ccDefault = () => CC_KEYS.reduce((o,k) => { o[k] = 'na'; return o; }, {});
 let LANG = localStorage.getItem('bgc_lang') || 'zh';
 // v9.3：版本标识 —— 用于「你在看的是不是最新版」判断 + 自动更新检测
-const APP_VER = 'v9.8';
-const APP_BUILD = '2026-09-14.1630';
+const APP_VER = 'v9.9';
+const APP_BUILD = '2026-09-14.1815';
 let _lastVerCheck = 0;
 
 // 9宫格位置编号（0-24，5x5）
@@ -448,10 +451,12 @@ const I18N = {
   strike_rate: { zh:'好球率 (%)', en:'Strike Rate (%)' }, strike_balls: { zh:'好球数', en:'Strikes (count)' }, strikeout: { zh:'投出三振', en:'Strikeouts Thrown' },
   frv_section: { zh:'📝 复盘（保存记录时一起填）', en:'📝 Review (fill with the record)' },
   cc_section: { zh:'🏥 教练检查表（人工观察）', en:'🏥 Coach checklist (visual only)' },
-  cc_hint: { zh:'以下 3 项单目手机拍不出来 —— 请教练目视确认。教练特别标注：外旋角度与肩胛骨是「受伤警讯」，疲劳时会最先变化。', en:'A single phone camera cannot measure these 3 — coach confirms visually. The coach flags external rotation and scapula as injury warnings that change first when fatigued.' },
+  cc_hint: { zh:'以下 5 项单目手机拍不出来 —— 请教练目视确认。教练特别标注：外旋角度与肩胛骨是「受伤警讯」，疲劳时会最先变化；后两项是他给这个年纪定的「必须马上做到」。', en:'A single phone camera cannot measure these 5 — coach confirms visually. External rotation and scapula are flagged as injury warnings; the last two are what the coach says must be fixed now at this age.' },
   cc_extRot: { zh:'外旋角度', en:'External rotation' },
   cc_pronation: { zh:'手腕内旋', en:'Wrist pronation' },
   cc_scapula: { zh:'肩胛骨面向本垒', en:'Scapula facing plate' },
+  cc_navelPlate: { zh:'落地时肚脐对准捕手', en:'Navel to plate at strike' },
+  cc_backFinish: { zh:'收尾手落到屁股后面', en:'Hand finishes behind hip' },
   cc_ok: { zh:'✅ 到位', en:'✅ OK' },
   cc_warn: { zh:'⚠️ 待改进', en:'⚠️ Watch' },
   cc_na: { zh:'— 未观察', en:'— n/a' },
@@ -686,7 +691,7 @@ const I18N = {
   warn_8u: { zh:'8 岁以下投手周上限', en:'Weekly limit (under 8)' },
   // v9.8：教练标的受伤警訊 × 投球量 的联动预警
   risk_flag_title: { zh:'🏥 教练标注的受伤警讯（近 14 天）', en:'🏥 Coach-flagged injury warnings (last 14 days)' },
-  risk_flag_advice: { zh:'教练特别标注：外旋角度与肩胛骨在疲劳时会最先变化。建议本周降量，并请教练再确认一次。', en:'The coach flags external rotation and scapula as the first things to shift when fatigued. Cut the load this week and ask the coach to re-check.' },
+  risk_flag_advice: { zh:'教练特别标注：外旋角度与肩胛骨在疲劳时会最先变化。疼痛红灯：肘外侧相对安全；肘内侧／后侧、肩前侧最危险，出现就停投。建议本周降量，并请教练再确认一次。', en:'The coach flags external rotation and scapula as the first things to shift when fatigued. Pain red flags: outer elbow is relatively safe; inner/back elbow and the front of the shoulder are dangerous — stop pitching. Cut the load this week and ask the coach to re-check.' },
   risk_combo: { zh:'🚨 超量 + 受伤警讯同时出现 —— 立即降量，连续休 2-3 天，别硬撑。', en:'🚨 High volume + injury flags at the same time — cut the load now and rest 2-3 days.' },
 
   // ===== v9.3 新增：AI教练页 / GC PDF 导入 / 内联复盘 / 体测数据 =====
@@ -897,7 +902,7 @@ function saveLLMConfig() {
 let DATA = loadData();
 loadLLMConfig();
 let currentTab = 'home';
-let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:null, strike:null, strikeBalls:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, pitcherHits:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'', review:{keep:'',improve:'',highlight:''}, coachCheck:{extRot:'na',pronation:'na',scapula:'na'} };
+let form = { date: new Date().toISOString().slice(0,10), type:'train', source:'self', speed:null, strike:null, strikeBalls:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, pitcherHits:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'', review:{keep:'',improve:'',highlight:''}, coachCheck: ccDefault() };
 let bodyForm = { date: new Date().toISOString().slice(0,10), height:'', weight:'' };
 // v9.5：复盘内联表单已移除（三问在添加记录表单里），reviewOpenId 不再需要
 // v9.3：体测数据表单
@@ -956,10 +961,10 @@ function pitchesThisWeek() {
     .filter(l => l.date >= monday && l.date <= today)
     .reduce((sum, l) => sum + (l.pitchCount || 0), 0);
 }
-// v9.8：最近 14 天教练检查表里标了「待改进」的项（外旋 / 内旋 / 肩胛骨）
+// v9.8：最近 14 天教练检查表里标了「待改进」的项（v9.9 起覆盖全部 CC_KEYS）
 function coachRiskFlags() {
   const cutoff = new Date(Date.now() - 14*864e5).toISOString().slice(0,10);
-  const keys = ['extRot','pronation','scapula'];
+  const keys = CC_KEYS;
   const hits = [];
   (DATA.logs || []).forEach(l => {
     if (!l.coachCheck || (l.date || '') < cutoff) return;
@@ -1623,7 +1628,7 @@ function renderLog(s) {
       </div>
       <div class="section-title">${t('cc_section')}</div>
       <div style="font-size:10px;color:#7a8aa1;margin:-4px 0 8px;line-height:1.55">${t('cc_hint')}</div>
-      ${['extRot','pronation','scapula'].map(k => `
+      ${CC_KEYS.map(k => `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;padding:7px 9px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
           <span style="font-size:12px;color:#334155;flex:1">${t('cc_'+k)}</span>
           <div class="seg" id="cc_${k}" style="flex:0 0 auto">
@@ -1673,7 +1678,7 @@ function renderLogList() {
       </div>` : '';
     // v9.8：教练检查表（外旋/内旋/肩胛骨）—— ⚠️ 项是教练标注的「受伤警讯」，标红
     const cc = l.coachCheck;
-    const ccKeys = ['extRot','pronation','scapula'];
+    const ccKeys = CC_KEYS;
     const ccUsed = cc ? ccKeys.filter(k => cc[k] && cc[k] !== 'na') : [];
     const ccWarn = ccUsed.some(k => cc[k] === 'warn');
     const ccBlock = ccUsed.length ? `
@@ -1712,14 +1717,15 @@ function saveLog() {
   // v9.4：复盘三问随记录一起保存
   const frv = form.review || {};
   if (frv.keep || frv.improve || frv.highlight) cleaned.review = { keep:frv.keep||'', improve:frv.improve||'', highlight:frv.highlight||'' };
-  // v9.8：教练检查表（外旋/内旋/肩胛骨）随记录保存 —— 全是「未观察」就不存
+  // v9.9：教练检查表（CC_KEYS 全部 5 项）随记录保存 —— 全是「未观察」就不存
   const cc = form.coachCheck || {};
-  if (['extRot','pronation','scapula'].some(k => cc[k] && cc[k] !== 'na')) {
-    cleaned.coachCheck = { extRot: cc.extRot||'na', pronation: cc.pronation||'na', scapula: cc.scapula||'na' };
+  if (CC_KEYS.some(k => cc[k] && cc[k] !== 'na')) {
+    const ccOut = {}; CC_KEYS.forEach(k => { ccOut[k] = cc[k] || 'na'; });
+    cleaned.coachCheck = ccOut;
   }
   DATA.logs.push(cleaned);
   saveData(DATA);
-  form = { date: new Date().toISOString().slice(0,10), type: form.type, source: form.source, speed:null, strike:null, strikeBalls:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, pitcherHits:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'', review:{keep:'',improve:'',highlight:''}, coachCheck:{extRot:'na',pronation:'na',scapula:'na'} };
+  form = { date: new Date().toISOString().slice(0,10), type: form.type, source: form.source, speed:null, strike:null, strikeBalls:null, mood:4, pitchCount:null, strikeout:null, hits:null, atBats:null, struckOut:null, pitcherHits:null, note:'', location:null, opponent:'', scoreSelf:null, scoreOpp:null, result:'', venue:'', review:{keep:'',improve:'',highlight:''}, coachCheck: ccDefault() };
   toast('✓ '+(LANG==='zh'?'已记录为训练/比赛':'Saved as train/match')); render();
 }
 
@@ -1779,8 +1785,8 @@ function bindFormEvents() {
   document.querySelectorAll('#f_type .seg-item').forEach(el=>{ el.onclick = () => { form.type = el.dataset.v; render(); }; });
   document.querySelectorAll('#f_source .seg-item').forEach(el=>{ el.onclick = () => { form.source = el.dataset.v; render(); }; });
   document.querySelectorAll('#f_mood .seg-item').forEach(el=>{ el.onclick = () => { form.mood = +el.dataset.v; render(); }; });
-  // v9.8：教练检查表（人工观察 3 项）
-  ['extRot','pronation','scapula'].forEach(k => {
+  // v9.9：教练检查表（人工观察 5 项）
+  CC_KEYS.forEach(k => {
     const box = document.getElementById('cc_' + k);
     if (!box) return;
     box.querySelectorAll('.seg-item').forEach(el => {
@@ -3101,7 +3107,10 @@ function poseSeriesToAngles(poses) {
     const hipShoulderSep = (shLine!=null && hpLine!=null) ? angDiff360(shLine, hpLine) : null;
     const sm = (sh && rsh) ? mid(sh, rsh) : null;
     const hm = (hp && rhp) ? mid(hp, rhp) : null;
-    const trunkTilt = (sm && hm) ? Math.abs(Math.atan2(sm.x-hm.x, sm.y-hm.y) * 180/Math.PI) : null;
+    // v9.9 修复（v9.8 遗留 bug）：原式分母用 sm.y-hm.y，肩在髋上方时恒为负，
+    //   atan2 结果永远落在 ±180° 附近 → 躯干侧倾每帧都算成 ~178°，项项被判「严重不足」。
+    //   改成 hm.y-sm.y（正）才是真正的侧倾角。
+    const trunkTilt = (sm && hm) ? Math.abs(Math.atan2(sm.x-hm.x, hm.y-sm.y) * 180/Math.PI) : null;
     const shoulderW = (sh && rsh) ? Math.hypot(sh.x-rsh.x, sh.y-rsh.y) : null;
     return {
       elbowL, elbowR, elbow: elbowL,                 // elbow 稍后按惯用手重定向
@@ -3112,6 +3121,9 @@ function poseSeriesToAngles(poses) {
       ankL: pt(la), ankR: pt(ra),
       wrL: pt(wr), wrR: pt(rwr),
       hipL: pt(hp), hipR: pt(rhp),
+      // v9.9：两个 90° 红线用的原始点
+      shL: pt(sh), shR: pt(rsh), elL: pt(el), elR: pt(rel),
+      shMid: sm, hipMid: hm,
       _wl: pt(wr), _wr: pt(rwr)
     };
   });
@@ -3157,7 +3169,16 @@ function poseSeriesToAngles(poses) {
     a.frontAnkle = (freeSide === 'R') ? a.ankR : a.ankL;
     a.throwWrist = (mainSide === 'R') ? a.wrR : a.wrL;         // 投球手腕
     a.oppHip = (mainSide === 'R') ? a.hipL : a.hipR;           // 对侧髋（收尾目标位）
+    // v9.9：教练讲的「两个 90° 红线」
+    //   ① armTrunk  上臂相对躯干夹角（顶点在肩；0°=手臂自然下垂，90°=抬平到肩线，>90°=抬过肩）
+    //   ② elbowOver 手肘相对肩线的高度（肩宽归一化，正值 = 手肘高于肩线）
+    const shM = (mainSide === 'R') ? a.shR : a.shL;
+    const elM = (mainSide === 'R') ? a.elR : a.elL;
+    a.armTrunk = (shM && elM && a.hipMid) ? ang(a.hipMid, shM, elM) : null;
+    a.elbowOver = (shM && elM && a.shMid && typeof a.shoulderW === 'number' && a.shoulderW > 0.01)
+      ? (a.shMid.y - elM.y) / a.shoulderW : null;
     delete a._wl; delete a._wr; delete a._speedL; delete a._speedR;
+    delete a.shL; delete a.shR; delete a.elL; delete a.elR; delete a.shMid; delete a.hipMid;
   });
   return out;
 }
@@ -3273,78 +3294,142 @@ function chainCheck(angles) {
   // ⑦ 軀幹最大側傾（全程）
   const trunkTilt = maxIn(0, N-1, 'trunkTilt');
 
+  // ⑨⑩ 教練的「兩個 90° 紅線」（v9.9）—— 他明確說這兩項跟受傷直接掛鉤
+  //   C1 = 出手瞬間「上臂相對軀幹夾角」（0°=手臂自然下垂，90°=抬平到肩線，>90°=抬過肩）
+  //   C2 = 落地→出手區間的手肘最高點（同一個角度的峰值）→ 過高＝肩膀夾擠
+  const maxIdxIn = (i0, i1, k) => {
+    let bi = -1, bv = -Infinity;
+    for (let i = Math.max(0,i0); i <= Math.min(N-1,i1); i++) {
+      const v = A[i] ? num(A[i][k]) : null;
+      if (v != null && v > bv) { bv = v; bi = i; }
+    }
+    return bi;
+  };
+  const armAtRelease = relF ? num(relF.armTrunk) : null;
+  let armPeakLo = Math.min(strideIdx, relIdx), armPeakHi = Math.max(strideIdx, relIdx);
+  if (armPeakHi - armPeakLo < 3) { armPeakLo = 0; armPeakHi = Math.max(0, relIdx); }
+  let armPeak = null, overPeak = null;
+  let peakIdx = maxIdxIn(armPeakLo, armPeakHi, 'armTrunk');
+  if (peakIdx < 0) peakIdx = maxIdxIn(0, N-1, 'armTrunk');   // 區間沒數據就退全段
+  if (peakIdx >= 0) { armPeak = num(A[peakIdx].armTrunk); overPeak = num(A[peakIdx].elbowOver); }
+
   const r1 = v => Math.round(v);
   const items = [
-    { no:1, key:'powerAngle', stageKey:'S1', stage: ZH?'抬腿跨步':'Leg lift',
+    { no:1, key:'powerAngle', grp:'skill', stageKey:'S1', stage: ZH?'抬腿跨步':'Leg lift',
       label: ZH?'後腳位置（Power Angle）':'Back-leg Power Angle',
       value: powerAngle, unit:'°', ideal:'≥140°',
       level: powerAngle==null?'nodata':(powerAngle>=150?'good':powerAngle>=140?'ok':powerAngle>=120?'weak':'bad'),
       fix: v => (ZH?'後膝角 ':'Back-knee ') + r1(v) + '°',
+      coach: ZH?'順序鏈的起點：後腳先撐住，後面的分離和蹬伸才做得出來。':'Start of the chain — the back leg holds first.',
       note: powerAngle==null ? '' : (ZH
         ? '落地帧後膝角 '+r1(powerAngle)+'°，'+(powerAngle>=140?'後腿撐住沒提前卸力':'後腿下沉、力量提前洩掉了')
         : 'Back knee '+r1(powerAngle)+'° at foot strike') },
 
-    { no:2, key:'strideShoulder', stageKey:'S2', stage: ZH?'前腳落地':'Foot strike',
+    { no:2, key:'strideShoulder', grp:'speed', stageKey:'S2', stage: ZH?'前腳落地':'Foot strike',
       label: ZH?'前腳落地 / 提早旋轉':'Foot strike / early rotation',
       value: earlyRate==null?null:earlyRate*100, unit:'%', ideal:'≤45%',
       level: earlyRate==null?'nodata':(earlyRate<=0.35?'good':earlyRate<=0.45?'ok':earlyRate<=0.60?'weak':'bad'),
       fix: v => (ZH?'落地時肩線已開 ':'Shoulders open ') + r1(v) + '%',
+      coach: ZH?'教練：「前腳落地、後腳跟往上的那個時間點，就是檢查肩髖分離的時候。」肩開得太早＝提早旋轉。'
+                :'Coach: the instant the front foot lands (back heel up) is exactly when separation is checked.',
       note: earlyRate==null
         ? (ZH?'肩線變化不足，無法判定（建議側拍）':'Not enough shoulder-line change (film side-on)')
         : (ZH
           ? '前腳落地時肩線只開了 '+r1(earlyRate*100)+'%，'+(earlyRate<=0.45?'髋先於肩、力量從下半身來':'肩開太早，屬提早旋轉')
           : (earlyRate<=0.45 ? 'Hips lead — power comes from the ground' : 'Shoulders open before the foot lands')) },
 
-    { no:3, key:'hipShoulder', stageKey:'S3', stage: ZH?'分離外旋':'Separation',
+    { no:3, key:'hipShoulder', grp:'speed', stageKey:'S3', stage: ZH?'分離外旋':'Separation',
       label: ZH?'肩髖分離（落地→出手）':'Hip-shoulder separation',
       value: hipShoulder, unit:'°', ideal:'≥55°',
       level: hipShoulder==null?'nodata':(hipShoulder>=55?'good':hipShoulder>=40?'ok':hipShoulder>=25?'weak':'bad'),
       fix: v => (ZH?'髋肩分离 ':'Hip-shoulder ') + r1(v) + '°',
+      coach: ZH?'教練：「這樣是增加球速最大的關鍵，也是最難訓練、最重要的。」判據：落地時肚臍／皮帶扣已對準捕手，前側仍朝側面。'
+                :'Coach: the single biggest speed factor — navel already to the plate while the chest still faces sideways.',
       note: hipShoulder==null ? '' : (ZH?'落地到出手区间峰值 '+r1(hipShoulder)+'°':'') },
 
-    { no:4, key:'extRotation', stageKey:'S3', stage: ZH?'分離外旋':'Separation',
+    { no:9, key:'elbowHeight', grp:'injury', stageKey:'S3', stage: ZH?'分離外旋':'Separation',
+      label: ZH?'手肘高度 C2（肩外展角）':'Elbow height C2 (abduction)',
+      value: armPeak, unit:'°', ideal:'≤90°',
+      level: armPeak==null?'nodata':(armPeak<=90?'good':armPeak<=100?'ok':armPeak<=115?'weak':'bad'),
+      fix: v => (ZH?'手肘高度 ':'Elbow height ') + r1(v) + '°',
+      coach: ZH
+        ? '教練：「C2 不能高於 90 度，過高很容易造成肩膀的夾擠。」他要求這個年紀必須馬上做到的兩項之一。'
+        : 'Coach: "C2 must not exceed 90° — too high causes shoulder impingement." One of the two must-fix items at this age.',
+      note: armPeak==null ? '' : (ZH
+        ? '落地到出手的手肘最高點 '+r1(armPeak)+'°，'+(armPeak<=90?'沒超過肩線'
+            :'抬太高'+(overPeak!=null?'（高於肩線約 '+Math.round(overPeak*100)+'% 肩寬）':''))
+        : 'Peak elbow height '+r1(armPeak)+'° in the strike→release window') },
+
+    { no:4, key:'extRotation', grp:'speed', stageKey:'S3', stage: ZH?'分離外旋':'Separation',
       label: ZH?'外旋角度（疲勞警訊）':'External rotation (fatigue flag)',
       value:null, unit:'', ideal: ZH?'人工':'manual',
       level:'manual', method:'manual',
-      fix: v => '', note: ZH?'單目 2D 量不準 · 請教練在檢查表勾選':'Not measurable in 2D' },
+      fix: v => '',
+      coach: ZH
+        ? '教練：「拉到最底再彈出去 —— 像投石車。這個階段你們柔軟度好，會很自然做到；發育長肌肉後角度會變小，才需要專門練。」'
+        : 'Coach: pull to the bottom then snap — like a catapult. Natural at this age; shrinks as she grows, then needs training.',
+      note: ZH?'單目 2D 量不準 · 請教練在檢查表勾選':'Not measurable in 2D' },
 
-    { no:5, key:'releaseElbow', stageKey:'S4', stage: ZH?'出手瞬間':'Release',
+    { no:10, key:'armAngleRelease', grp:'injury', stageKey:'S4', stage: ZH?'出手瞬間':'Release',
+      label: ZH?'上臂角度 C1（出手瞬間）':'Upper-arm angle C1 (release)',
+      value: armAtRelease, unit:'°', ideal:'≤90°',
+      level: armAtRelease==null?'nodata':(armAtRelease<=90?'good':armAtRelease<=100?'ok':armAtRelease<=115?'weak':'bad'),
+      fix: v => (ZH?'上臂角度 ':'Upper-arm ') + r1(v) + '°',
+      coach: ZH
+        ? '教練：「只要 C1 過大，轉出去的時候，手肘的負擔就會太大。」'
+        : 'Coach: "if C1 is too big, the elbow takes too much load as it whips through."',
+      note: armAtRelease==null ? '' : (ZH
+        ? '出手那幀上臂與軀幹夾角 '+r1(armAtRelease)+'°，'+(armAtRelease<=90?'在 90° 紅線內':'已超過 90° 紅線')
+        : 'Upper-arm vs trunk at release '+r1(armAtRelease)+'°') },
+
+    { no:5, key:'releaseElbow', grp:'skill', stageKey:'S4', stage: ZH?'出手瞬間':'Release',
       label: ZH?'出手瞬間肘角':'Elbow at release',
       value: releaseElbow, unit:'°', ideal:'≥170°',
       level: releaseElbow==null?'nodata':(releaseElbow>=170?'good':releaseElbow>=158?'ok':releaseElbow>=140?'weak':'bad'),
       fix: v => (ZH?'出手肘角 ':'Release elbow ') + r1(v) + '°',
+      coach: ZH?'教練用投石車比喻：「拉到最底再彈出去」—— 彈出去那一下（出手）手臂要接近伸直，球速跟旋轉才出得來。'
+                :'Coach\'s catapult image: "pull to the bottom, then snap" — the arm should be near straight at release.',
       note: releaseElbow==null ? '' : (ZH?'出手那帧肘角 '+r1(releaseElbow)+'°':'') },
 
-    { no:6, key:'frontLegDrive', stageKey:'S4', stage: ZH?'出手瞬間':'Release',
+    { no:6, key:'frontLegDrive', grp:'speed', stageKey:'S4', stage: ZH?'出手瞬間':'Release',
       label: ZH?'前腳反作用力（蹬伸）':'Front-leg drive',
       value: frontLegDrive, unit:'°', ideal:'≥20°',
       level: frontLegDrive==null?'nodata':(frontLegDrive>=25?'good':frontLegDrive>=20?'ok':frontLegDrive>=10?'weak':'bad'),
       fix: v => (ZH?'前膝蹬伸 ':'Front-knee drive ') + r1(v) + '°',
+      coach: ZH?'教練：「前腳要做一個剎車抵擋的動作，讓我們力量從後面彈出去。」跟肩髖分離同屬球速關鍵。'
+                :'Coach: the front foot brakes and blocks, so the power springs from behind.',
       note: frontLegDrive==null ? '' : (ZH
         ? '前膝從落地 '+r1(kneeAtStride)+'° 蹬到出手 '+r1(kneeAtRelease)+'°，'+(frontLegDrive>=20?'力量释放完全':'蹬伸不足')
         : '') },
 
-    { no:7, key:'armFinish', stageKey:'S5', stage: ZH?'手臂收尾':'Finish',
-      label: ZH?'手臂收尾':'Arm finish',
+    { no:7, key:'armFinish', grp:'injury', stageKey:'S5', stage: ZH?'手臂收尾':'Finish',
+      label: ZH?'手臂收尾（手要繞到屁股後面）':'Arm finish (hand behind the hip)',
       value: armFinish, unit:'×', ideal:'≤1.2×',
       level: armFinish==null?'nodata':(armFinish<=1.0?'good':armFinish<=1.2?'ok':armFinish<=1.6?'weak':'bad'),
       fix: v => (ZH?'收尾手到胯 ':'Finish hand-hip ') + v.toFixed(1) + '×',
+      coach: ZH?'教練：「丟完手要落到屁股後面，表示用後背去剎車；很多人丟完停在前面，肩膀受力，丟久了很容易受傷 —— 只要肩膀前面受傷就不太能丟球。」他要求這個年紀必須馬上做到。'
+                :'Coach: the hand must finish behind the hip (back muscles brake). Stopping out front loads the shoulder and leads to injury. Must-fix at this age.',
       note: armFinish==null ? '' : (ZH
-        ? '出手後手落到對側胯 '+armFinish.toFixed(1)+' 個肩寬，'+(armFinish<=1.2?'收尾到位、減速肌群吃住了':'收尾沒到位')
+        ? '出手後手落到對側胯 '+armFinish.toFixed(1)+' 個肩寬，'+(armFinish<=1.2?'收尾繞過去了、減速肌群吃住了':'收尾沒繞到身體後側')
         : '') },
 
-    { no:8, key:'trunkTilt', stageKey:'S6', stage: ZH?'全程':'Throughout',
+    { no:8, key:'trunkTilt', grp:'skill', stageKey:'S6', stage: ZH?'全程':'Throughout',
       label: ZH?'軀幹最大側傾':'Peak trunk tilt',
       value: trunkTilt, unit:'°', ideal:'≤10°',
       level: trunkTilt==null?'nodata':(trunkTilt<=10?'good':trunkTilt<=16?'ok':trunkTilt<=24?'weak':'bad'),
       fix: v => (ZH?'躯干侧倾 ':'Trunk tilt ') + r1(v) + '°',
+      coach: ZH?'教練這次沒提，屬系統補充項（側傾過大會漏掉能量）。':'Not in this coach session — supplementary metric.',
       note: trunkTilt==null ? '' : (ZH?'动作中最大侧倾 '+r1(trunkTilt)+'°':'') }
   ];
 
   const rank = { bad:0, weak:1, ok:2, good:3, manual:4, nodata:5 };
+  // v9.9：斷點排序先看教練的分組（受傷關優先），再看嚴重程度 ——
+  //   教練原話「第六個跟第二個是你們現在必須馬上做到的事情」，所以紅線項必須排在斷點最前面。
+  const grpRank = { injury:0, speed:1, skill:2 };
+  const gRank = (g) => (grpRank[g] === undefined ? 9 : grpRank[g]);
   const auto = items.filter(i => i.method !== 'manual');
   const needFix = auto.filter(i => i.level==='weak' || i.level==='bad')
-                      .sort((a,b) => rank[a.level] - rank[b.level]);
+                      .sort((a,b) => (gRank(a.grp) - gRank(b.grp)) || (rank[a.level] - rank[b.level]));
   const passed = auto.filter(i => i.level==='good' || i.level==='ok');
   const nodata = auto.filter(i => i.level === 'nodata');
   return {
@@ -3474,9 +3559,10 @@ function mockCoachEval(angles) {
 
   // 各级别得分（和 chainCheck 的判定一致，不再另立一套阈值）
   const SC = { good:92, ok:80, weak:58, bad:38 };
-  // v9.8：只对「有数据的自动项」计分 —— 拍不到的项目不该拉低分数
-  const W = { hipShoulder:0.21, releaseElbow:0.19, powerAngle:0.16, strideShoulder:0.16,
-              frontLegDrive:0.14, armFinish:0.08, trunkTilt:0.06 };
+  // v9.9：按教练的分组重排权重 —— 受傷關（C2 手肘高度、收尾）優先，其次球速关键（分离、蹬伸）
+  const W = { elbowHeight:0.15, armFinish:0.13, armAngleRelease:0.11,
+              hipShoulder:0.17, frontLegDrive:0.13, strideShoulder:0.10,
+              releaseElbow:0.11, powerAngle:0.06, trunkTilt:0.04 };
   const scored = node.filter(n => n.method !== 'manual' && n.level !== 'nodata');
   let overall = 70;
   if (scored.length) {
@@ -3492,6 +3578,36 @@ function mockCoachEval(angles) {
 
   // 每个检查点的「待整改」话术库
   const LIB = {
+    elbowHeight: {
+      label: ZH?'手肘高度 C2（肩外展角）':'Elbow height C2',
+      msg: v => ZH
+        ? `落地到出手手肘最高抬到 ${rd(v)}°，超过 90° 红线 —— 手抬太高会夹到肩膀。教练点名这是这个年纪必须马上改的两项之一。`
+        : `Peak elbow height ${rd(v)}° — past the 90° red line. A high elbow impinges the shoulder; a must-fix at this age.`,
+      tips: ZH ? [
+        '「壓肘」：抬臂到位時只想「肘尖往下壓」、不要往上抬，對鏡慢做 20 次',
+        '肩袖穩定：彈力帶外旋 + Y 舉，每週 3 次 × 15 下',
+        '側拍落地→出手這一段，只看手肘有沒有高過肩線，每次 10 球'
+      ] : [
+        'Elbow-down cue: 20 slow mirror reps, think "press the elbow tip down"',
+        'Banded ER + Y-raise, 3×15, three times a week',
+        'Film the strike→release window side-on, check whether the elbow passes the shoulder line'
+      ]
+    },
+    armAngleRelease: {
+      label: ZH?'上臂角度 C1（出手瞬間）':'Upper-arm angle C1',
+      msg: v => ZH
+        ? `出手那帧上臂与躯干夹角 ${rd(v)}°，超过 90° 红线 —— 手臂甩到身体侧面，加速那一下手肘要多吃一份力，是肘伤的来源。`
+        : `Upper-arm vs trunk at release is ${rd(v)}°, past the 90° red line — the elbow eats extra load through the whip.`,
+      tips: ZH ? [
+        '「貼身出手」：對鏡慢動作出手 20 次，肘尖全程指向捕手方向',
+        '彈力帶肩內旋，每週 2 次 × 3 組 × 15 下，練出手那下的穩定',
+        '側拍出手那一格，量上臂與軀幹夾角，目標 ≤90°'
+      ] : [
+        'Release-close drill: 20 slow mirror reps, elbow tip stays pointed at the plate',
+        'Banded shoulder IR, 3×15, twice a week',
+        'Film the release frame side-on, measure upper-arm vs trunk, target ≤90°'
+      ]
+    },
     powerAngle: {
       label: ZH?'後腳 Power Angle':'Back-leg Power Angle',
       msg: v => ZH
@@ -3599,9 +3715,8 @@ function mockCoachEval(angles) {
     }
   };
 
-  // 只针对「待整改项」，最严重的排第一
-  const rank = { bad:0, weak:1 };
-  const fixItems = m.needFix.slice().sort((a,b) => (rank[a.level]||9) - (rank[b.level]||9));
+  // v9.9：直接用 chainCheck 排好的顺序（受伤关优先 → 再看严重度），不再二次排序
+  const fixItems = m.needFix.slice();
 
   let primary;
   if (fixItems.length) {
@@ -3873,8 +3988,12 @@ function buildPrompts(action, angles) {
       ? `场景。真刀真枪的对抗，你偏严格、教练腔调，重点是让她动作稳定、不慌、不作废。\n`
       : `场景。练功房时间，你偏温柔、姐姐腔调，重点是让她发现自己的动作特点、自己去试不同感觉。\n`;
     sysPrompt += `输出必须遵守的硬规则：\n`;
-    sysPrompt += `1. 【最重要】用户消息里已经给出教練的「投球動作順序鏈」判定表（6 个 CheckPoint），每项都标了 ✅达标 / ❌待整改。\n`;
+    sysPrompt += `1. 【最重要】用户消息里已经给出教練的「投球動作順序鏈」判定表（${m.items.length} 个检查点），每项都标了 ✅达标 / ❌待整改，并标了分组。\n`;
     sysPrompt += `   - 【核心逻辑】这是「顺序链」：後腳 Power Angle → 前腳落地（有無提早旋轉）→ 肩髖分離/外旋 → 出手（前腳反作用力）→ 手臂收尾。\n`;
+    sysPrompt += `   - 【分組】🏥受傷關（手肘高度 C2、上臂角度 C1、手臂收尾）＝傷病紅線，必須最優先講；⚡球速關鍵（肩髖分離、前腳反作用力）＝成績項；其他是補充項。\n`;
+    sysPrompt += `   - 【教練點名的必改項】教練原話：這個年紀「手肘高度 C2」跟「手臂收尾」必須馬上做到。這兩項不達標時，必須放在最前面講。\n`;
+    sysPrompt += `   - 【受傷紅燈知識】肘外側痛相對安全；肘內側／後側痛、肩前側痛最危險（教練自己肩開過刀後就不太能丟球）。提到疼痛時必須用這個分區。\n`;
+    sysPrompt += `   - 【球數】教練說這個階段小朋友沒力量跟爆發力、不易受傷，「除非丟多」—— 球數是第一風險因子。\n`;
     sysPrompt += `     顺序错了后面全部打折 —— 诊断必须说清「断在哪个环节、为什么它拖累了后面的环节」。\n`;
     sysPrompt += `   - pose_problem 只准讲「必须整改的项」；如果全部达标，就写"顺序链各环节全部达标"。\n`;
     sysPrompt += `   - ✅ 已达标的项，**绝对禁止**出现在 pose_problem、pose_tips、tips 里（不要建议她去改已经做对的事）。\n`;
@@ -3905,8 +4024,12 @@ function buildPrompts(action, angles) {
       ? `tone: short, firm, pre-game coach voice. No baby talk.\n`
       : `tone: gentle, exploratory, big-sister companion. A small joke is fine.\n`;
     sysPrompt += `HARD RULES:\n`;
-    sysPrompt += `1. [MOST IMPORTANT] The user message contains the coach's pitching kinetic-chain verdict table (6 CheckPoints, ✅ pass / ❌ needs work).\n`;
+    sysPrompt += `1. [MOST IMPORTANT] The user message contains the coach's pitching kinetic-chain verdict table (${m.items.length} checkpoints, ✅ pass / ❌ needs work) with group tags.\n`;
     sysPrompt += `   - It is a CHAIN: back-leg Power Angle → foot strike (early rotation?) → hip-shoulder separation / external rotation → release (front-leg drive) → arm finish.\n`;
+    sysPrompt += `   - GROUPS: 🏥 injury red line (elbow height C2, upper-arm angle C1, arm finish) = always address these first; ⚡ speed keys (hip-shoulder separation, front-leg drive); the rest are supplementary.\n`;
+    sysPrompt += `   - Coach's must-fix at this age: elbow height C2 and arm finish. If either fails, lead with it.\n`;
+    sysPrompt += `   - PAIN RED FLAGS: outer elbow is relatively safe; inner/back elbow and the FRONT of the shoulder are dangerous (the coach's own shoulder was operated on and he can no longer pitch). Use this whenever pain comes up.\n`;
+    sysPrompt += `   - PITCH COUNT: at this age kids lack the strength to get hurt — "unless they throw a lot". Pitch count is the #1 risk factor.\n`;
     sysPrompt += `     If an earlier link fails, everything downstream degrades. Always name WHICH link broke and why.\n`;
     sysPrompt += `   - pose_problem may ONLY discuss "needs work" items; if all pass, say "the whole chain passed".\n`;
     sysPrompt += `   - ✅ passed items MUST NOT appear in pose_problem, pose_tips or tips.\n`;
@@ -3941,15 +4064,17 @@ function buildPrompts(action, angles) {
     if (it.key === 'armFinish')     return v <= 1.2 ? `优于上限 ${(1.2-v).toFixed(1)}×` : `超 ${(v-1.2).toFixed(1)}×`;
     return '';
   };
+  // v9.9：给每项打上教练的分组标签（受伤关 / 球速关键 / 补充）
+  const GRP_TAG = { injury: ZH?'🏥受傷關':'🏥 Injury', speed: ZH?'⚡球速關鍵':'⚡ Speed', skill: ZH?'·補充':'· extra' };
   const markOf = (it) => (it.level === 'good' || it.level === 'ok') ? '✅ 达标'
     : it.level === 'weak' ? '❌ 不足' : it.level === 'bad' ? '❌ 严重不足' : '⚠️ 未识别到';
   const line = (it) => {
     const vt = valTxt(it), gap = gapOf(it);
-    return `- ${it.label}：${vt == null ? '未识别到' : vt}（理想 ${it.ideal}）→ ${markOf(it)}${vt != null && gap ? '（' + gap + '）' : ''}`;
+    return `- [${GRP_TAG[it.grp] || '·'}] ${it.label}：${vt == null ? '未识别到' : vt}（理想 ${it.ideal}）→ ${markOf(it)}${vt != null && gap ? '（' + gap + '）' : ''}`;
   };
 
   const zhLines = [];
-  zhLines.push(`## 投球动作顺序链（教练给的 6 个 CheckPoint，系统已核算）`);
+  zhLines.push(`## 投球动作顺序链（教练给的 ${m.items.length} 个检查点，系统已核算）`);
   zhLines.push(`共 ${numFrames} 帧，成功识别 ${pq.valid} 帧｜前腳落地帧 #${m.strideIdx + 1}｜出手帧 #${m.relIdx + 1}（均按动作自动判定，非固定位置）`);
   zhLines.push('');
   zhLines.push(`**这张表要按顺序读 —— 教練的要點是「顺序链」：前一个环节不对，后面全部打折。**`);
@@ -3964,7 +4089,11 @@ function buildPrompts(action, angles) {
   if (m.needFix.length) {
     zhLines.push(`## 顺序链断点（按上面的顺序，最靠前的就是根因）`);
     zhLines.push(`断在【${m.needFix[0].stage}】环节 —— ${m.needFix[0].label}。`);
-    if (m.needFix.length > 1) zhLines.push(`其次是【${m.needFix[1].stage}】—— ${m.needFix[1].label}。`);
+    if (m.needFix[0].coach) zhLines.push(`教練原話依據：${m.needFix[0].coach}`);
+    if (m.needFix.length > 1) {
+      zhLines.push(`其次是【${m.needFix[1].stage}】—— ${m.needFix[1].label}。`);
+      if (m.needFix[1].coach) zhLines.push(`教練原話依據：${m.needFix[1].coach}`);
+    }
     zhLines.push('');
     zhLines.push(`## 本次必须整改的项（只有这 ${m.needFix.length} 项）`);
     m.needFix.forEach((it, i) => zhLines.push(`${i + 1}. 【${it.stage}】${it.fix(it.value)}（${it.level === 'bad' ? '严重不足' : '不足'}，理想 ${it.ideal}）`));
@@ -4022,7 +4151,7 @@ function buildPrompts(action, angles) {
     : it.key === 'armFinish' ? it.value.toFixed(1) + '×'
     : Math.round(it.value) + '°';
   const enLines = [];
-  enLines.push(`## Pitching kinetic chain — the coach's 6 CheckPoints (system-computed)`);
+  enLines.push(`## Pitching kinetic chain — the coach's ${m.items.length} checkpoints (system-computed)`);
   enLines.push(`${numFrames} frames, ${pq.valid} detected | stride foot strike #${m.strideIdx + 1} | release frame #${m.relIdx + 1} (both auto-detected, not fixed positions)`);
   enLines.push('');
   enLines.push(`**Read this IN ORDER — it is a chain: if an earlier link fails, everything downstream degrades.**`);
@@ -4030,12 +4159,13 @@ function buildPrompts(action, angles) {
   m.items.forEach(it => {
     if (it.stage !== enStage) { enStage = it.stage; enLines.push(`[${enStage}]`); }
     if (it.method === 'manual') enLines.push(`- ${it.label}: NOT measurable on-device — coach must confirm visually. Never invent a number.`);
-    else enLines.push(`  - ${it.label}: ${enVal(it)} (ideal ${it.ideal}) → ${it.level === 'weak' ? '❌ WEAK' : it.level === 'bad' ? '❌ SEVERELY WEAK' : '✅ PASS'}`);
+    else enLines.push(`  - [${GRP_TAG[it.grp] || '·'}] ${it.label}: ${enVal(it)} (ideal ${it.ideal}) → ${it.level === 'weak' ? '❌ WEAK' : it.level === 'bad' ? '❌ SEVERELY WEAK' : '✅ PASS'}`);
   });
   enLines.push('');
   enLines.push(`## MUST-FIX items (only these ${m.needFix.length})`);
   if (m.needFix.length) {
     enLines.push(`Chain breaks at [${m.needFix[0].stage}] — ${m.needFix[0].label}.`);
+    if (m.needFix[0].coach) enLines.push(`Coach's own words: ${m.needFix[0].coach}`);
     m.needFix.forEach((it, i) => enLines.push(`${i + 1}. [${it.stage}] ${it.fix(it.value)}`));
   } else {
     enLines.push(`(none — the whole chain passed. Set pose_problem to "the whole chain passed".)`);
@@ -4320,6 +4450,8 @@ function resultHTML() {
       : it.key === 'armFinish' ? it.value.toFixed(1) + '×'
       : Math.round(it.value) + '°';
     const lvCol = (lv) => (lv==='good'||lv==='ok') ? '#4ade80' : lv==='weak' ? '#fbbf24' : lv==='bad' ? '#f87171' : lv==='manual' ? '#94a3b8' : '#64748b';
+    // v9.9：教练的分组色标 —— 红＝受傷關（伤病红线）,蓝＝球速關鍵,灰＝补充项
+    const grpCol = (g) => g === 'injury' ? '#f87171' : g === 'speed' ? '#60a5fa' : '#64748b';
     const lvTag = (lv) => (lv==='good'||lv==='ok') ? '✅' : lv==='weak' ? (ZH?'⚠️ 不足':'⚠️ weak') : lv==='bad' ? (ZH?'❌ 严重不足':'❌ severe') : '';
     const breakKey = mtx.needFix.length ? mtx.needFix[0].key : null;
 
@@ -4352,7 +4484,7 @@ function resultHTML() {
       const breakTag = isBreak ? ` <span style="background:#f87171;color:#450a0a;font-size:9px;padding:1px 5px;border-radius:6px;font-weight:700">${ZH?'斷點':'BREAK'}</span>` : '';
       return `${showStage ? `<div style="color:#67e8f9;font-size:10px;font-weight:700;margin:9px 0 2px;letter-spacing:1px">${it.stage}</div>` : ''}
         <div style="display:flex;justify-content:space-between;align-items:center;padding:5px ${isBreak?'6px':'0'};border-bottom:1px dashed #374151;${isBreak?'border-left:3px solid #f87171;background:#1f1010;border-radius:4px':''}">
-          <span style="color:#cbd5e1;font-size:12px">${it.label}${breakTag}<span style="color:#64748b;font-size:10px">（${ZH?'理想':'ideal'} ${it.ideal}）</span></span>
+          <span style="color:#cbd5e1;font-size:12px"><span style="color:${grpCol(it.grp)}">●</span> ${it.label}${breakTag}<span style="color:#64748b;font-size:10px">（${ZH?'理想':'ideal'} ${it.ideal}）</span></span>
           <span style="font-size:12px;color:${lvCol(it.level)};font-weight:700;white-space:nowrap;margin-left:6px">${v} ${it.method === 'manual' ? '' : lvTag(it.level)}</span>
         </div>`;
     }).join('');
@@ -4361,13 +4493,14 @@ function resultHTML() {
       ? `<div style="margin-top:8px;background:#1f1010;border:1px solid #7f1d1d;border-radius:7px;padding:7px 9px;color:#fca5a5;font-size:11px;line-height:1.6">
            ${ZH?'順序鏈斷點':'Chain break'}：<b>${mtx.needFix[0].stage} · ${mtx.needFix[0].label}</b>
            ${mtx.needFix.length > 1 ? `<br>${ZH?'其次':'Next'}：${mtx.needFix[1].stage} · ${mtx.needFix[1].label}` : ''}
+           ${mtx.needFix[0].coach ? `<div style="margin-top:6px;padding-top:5px;border-top:1px dashed #7f1d1d;color:#fecaca">📣 ${mtx.needFix[0].coach}</div>` : ''}
          </div>`
       : `<div style="margin-top:8px;background:#0f2417;border:1px solid #14532d;border-radius:7px;padding:7px 9px;color:#86efac;font-size:11px;line-height:1.6">${ZH?'✅ 順序鏈各環節全部達標':'✅ Whole chain passed'}</div>`;
 
     metricsBlock = `
       <div style="background:#111827;border:1px solid #4b5563;border-radius:10px;padding:10px 12px;margin-top:10px">
         <div style="color:#e5e7eb;font-size:12px;font-weight:600;margin-bottom:2px">🔗 ${ZH?'投球動作順序鏈':'Pitching kinetic chain'}</div>
-        <div style="color:#94a3b8;font-size:10px;line-height:1.5">${ZH?'教練的 6 個 CheckPoint · 按順序讀，前一個不對、後面全部打折':'The coach\'s 6 CheckPoints — read in order; an earlier break degrades everything after it'}</div>
+        <div style="color:#94a3b8;font-size:10px;line-height:1.5">${ZH?'教練的順序鏈檢查表 · 按順序讀，前一個不對、後面全部打折 · <span style="color:#f87171">●</span> 受傷關 <span style="color:#60a5fa">●</span> 球速關鍵':'Coach kinetic chain — read in order · <span style="color:#f87171">●</span> injury <span style="color:#60a5fa">●</span> speed'}</div>
         <div style="display:flex;align-items:flex-start;margin:12px 0 4px">${timeline}</div>
         ${rows}
         ${breakNote}
