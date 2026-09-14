@@ -419,8 +419,8 @@
 const KEY = 'baseball_growth_coach_v6';
 let LANG = localStorage.getItem('bgc_lang') || 'zh';
 // v9.3：版本标识 —— 用于「你在看的是不是最新版」判断 + 自动更新检测
-const APP_VER = 'v9.6';
-const APP_BUILD = '2026-09-14.1135';
+const APP_VER = 'v9.7';
+const APP_BUILD = '2026-09-14.1540';
 let _lastVerCheck = 0;
 
 // 9宫格位置编号（0-24，5x5）
@@ -617,6 +617,7 @@ const I18N = {
   ai_err_no_pose: { zh:'未检测到人体，请让镜头拍到完整上半身', en:'No body detected. Show full upper body to the camera.' },
   ai_err_too_short: { zh:'视频太短（<0.5 秒）', en:'Video too short (<0.5s)' },
   ai_err_camera: { zh:'无法访问摄像头：', en:'Cannot access camera: ' },
+  ai_quality_label: { zh:'识别质量', en:'Detection' },
   ai_err_generic: { zh:'分析中断了，可以重试一次', en:'Analysis stopped — you can retry' },
   ai_retry: { zh:'重新分析', en:'Retry analysis' },
   export_section: { zh:'📤 数据导出（发明展准备）', en:'📤 Export (for Geneva)' },
@@ -840,10 +841,29 @@ const LLM = {
   enabled: false,
   provider: 'zhipu',
   apiKey: '',
-  models: { zhipu:'glm-4-flash', deepseek:'deepseek-chat', gemini:'gemini-1.5-flash-latest' }
+  // v9.7：默认从 glm-4-flash 升到 glm-4.5-flash。
+  // flash 级模型对「把姿态数据翻译成具体动作诊断」这种任务指令遵循太差，
+  // 会不管喂什么数据都吐同一套模板（这是「放什么视频结论都一样」的主因之一）。
+  models: { zhipu:'glm-4.5-flash', deepseek:'deepseek-chat', gemini:'gemini-1.5-flash-latest' },
+  modelChosen: false       // v9.7：用户是否手动选过模型档位
 };
+// v9.7：可选模型档位（实测均可用）
+const ZHIPU_MODELS = [
+  { id:'glm-4.5-flash', label:'GLM-4.5-Flash 「推荐」快 + 听话' },
+  { id:'glm-4.5-air',   label:'GLM-4.5-Air 均衡' },
+  { id:'glm-4-air',     label:'GLM-4-Air 均衡（上一代）' },
+  { id:'glm-4-plus',    label:'GLM-4-Plus 更强 · 稍慢' },
+  { id:'glm-4.6',       label:'GLM-4.6 最强 · 最慢' },
+  { id:'glm-4-flash',   label:'GLM-4-Flash 最快 · 结论最模板化' }
+];
 function llmModel() { return LLM.models[LLM.provider] || LLM.models.zhipu; }
-function llmLabel() { return LLM.provider==='zhipu' ? 'Zhipu GLM-4-Flash' : LLM.provider==='deepseek' ? 'DeepSeek Chat' : 'Gemini 1.5 Flash'; }
+function llmLabel() {
+  if (LLM.provider === 'zhipu') {
+    // glm-4.5-flash → GLM-4.5-Flash
+    return 'Zhipu ' + llmModel().replace(/^glm/i, 'GLM').replace(/-([a-z])/g, (_, c) => '-' + c.toUpperCase());
+  }
+  return LLM.provider === 'deepseek' ? 'DeepSeek Chat' : 'Gemini 1.5 Flash';
+}
 function loadLLMConfig() {
   try {
     const s = JSON.parse(localStorage.getItem('llm_config_v2')||'{}');
@@ -851,10 +871,14 @@ function loadLLMConfig() {
     if (typeof s.provider === 'string' && s.provider) LLM.provider = s.provider;
     if (typeof s.apiKey === 'string') LLM.apiKey = s.apiKey;
     if (s.models && typeof s.models === 'object') { Object.assign(LLM.models, s.models); }
+    if (typeof s.modelChosen === 'boolean') LLM.modelChosen = s.modelChosen;
+    // v9.7 迁移：老配置默认是 glm-4-flash（太弱 → 结论模板化）。
+    // 用户如果从没主动选过档位，就自动升级到 glm-4.5-flash。
+    if (!LLM.modelChosen && LLM.models.zhipu === 'glm-4-flash') LLM.models.zhipu = 'glm-4.5-flash';
   } catch(e) {}
 }
 function saveLLMConfig() {
-  try { localStorage.setItem('llm_config_v2', JSON.stringify({enabled:LLM.enabled, provider:LLM.provider, apiKey:LLM.apiKey, models:LLM.models})); } catch(e) {}
+  try { localStorage.setItem('llm_config_v2', JSON.stringify({enabled:LLM.enabled, provider:LLM.provider, apiKey:LLM.apiKey, models:LLM.models, modelChosen:!!LLM.modelChosen})); } catch(e) {}
 }
 
 let DATA = loadData();
@@ -2185,6 +2209,14 @@ function renderMe(s) {
           <option value="gemini" ${LLM.provider==='gemini'?'selected':''}>${t('ai_provider_gemini')}</option>
         </select>
         <div style="font-size:10px;color:#7c3aed;margin-top:4px">model: <code style="background:#f3e8ff;padding:1px 5px;border-radius:4px" id="llm_model_label">${llmModel()}</code></div>
+        ${LLM.provider==='zhipu' ? `
+        <div style="margin-top:8px">
+          <label style="font-size:11px;color:#6b21a8;font-weight:600;display:block;margin-bottom:4px">${LANG==='zh'?'模型档位（影响分析质量）':'Model tier (affects quality)'}</label>
+          <select id="llm_model_sel" style="width:100%;padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;background:#fff;color:#1f3a5f">
+            ${ZHIPU_MODELS.map(m => `<option value="${m.id}" ${llmModel()===m.id?'selected':''}>${m.label}</option>`).join('')}
+          </select>
+          <div style="font-size:10px;color:#7c3aed;margin-top:4px;line-height:1.5">${LANG==='zh'?'「快 + 听话」指指令遵循好、结论不会千篇一律。分析质量不够就往上换一档。':'Higher tiers follow instructions better and produce less templated advice.'}</div>
+        </div>` : ''}
       </div>
       <div class="field" style="margin-top:8px">
         <label>${t('ai_apikey')}</label>
@@ -2399,7 +2431,17 @@ function bindLLMSettings() {
     LLM.provider = e.target.value;
     saveLLMConfig();
     updateLLMGetKeyLink();
+    render();                       // v9.7：模型档位只对智谱显示，切 provider 要重绘
     toast(t('ai_settings_saved'));
+  };
+  // v9.7：模型档位选择
+  const modEl = document.getElementById('llm_model_sel');
+  if (modEl) modEl.onchange = e => {
+    LLM.models[LLM.provider] = e.target.value;
+    LLM.modelChosen = true;
+    saveLLMConfig();
+    updateLLMGetKeyLink();
+    toast('✓ ' + (LANG==='zh' ? '已切换模型：' : 'Model: ') + e.target.value);
   };
   const keyEl = document.getElementById('llm_key');
   if (keyEl) keyEl.oninput = e => { LLM.apiKey = e.target.value.trim(); saveLLMConfig(); updateLLMStatusUI(); };
@@ -2496,11 +2538,22 @@ async function ensureLandmarker() {
   if (AI.landmarker) return AI.landmarker;
   const m = await import(MP_LIB);
   const vision = await m.FilesetResolver.forVisionTasks(MP_WASM);
-  AI.landmarker = await m.PoseLandmarker.createFromOptions(vision, {
-    baseOptions: { modelAssetPath: MP_MODEL, delegate: 'GPU' },
+  // v9.7：改用 CPU delegate。GPU delegate 在部分机型会「初始化成功、但推理恒返回空姿态」，
+  // 这是「放什么视频都分析不出东西」的隐形元凶之一；lite 模型 20 帧用 CPU 也只多花不到 1 秒。
+  // 同时把置信度阈值 0.5 → 0.3，远景/快速挥臂这种难帧的检出率明显提高。
+  const mk = (baseOpts) => m.PoseLandmarker.createFromOptions(vision, {
+    baseOptions: Object.assign({ modelAssetPath: MP_MODEL }, baseOpts || {}),
     runningMode: 'VIDEO', numPoses: 1,
-    minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5
+    minPoseDetectionConfidence: 0.3, minPosePresenceConfidence: 0.3, minTrackingConfidence: 0.3
   });
+  try {
+    AI.landmarker = await mk({ delegate: 'CPU' });
+    AI.delegate = 'CPU';
+  } catch (e) {
+    console.warn('[pose] CPU delegate failed, retry with default', (e && e.message) || e);
+    AI.landmarker = await mk(null);
+    AI.delegate = 'default';
+  }
   return AI.landmarker;
 }
 
@@ -2532,6 +2585,69 @@ function stopAISteam() {
   if (_aiRecorder && _aiRecorder.state !== 'inactive') { try { _aiRecorder.stop(); } catch(e){} }
 }
 
+// v9.7：识别失败专用页 —— 与其拿 0/-Infinity 去让大模型编一套废话，不如老实说清楚
+function poseFailedHTML() {
+  const ZH = LANG === 'zh';
+  const q = AI.poseQuality || { valid: 0, total: 0 };
+  const reasons = ZH ? [
+    '人物太远：手机放在拍摄位置 3-5 米内，人在画面里至少占一半高度',
+    '只拍到上半身 / 腿被挡住：要能看到头、肩、髋、膝的完整轮廓',
+    '逆光：人背对窗户或灯时只剩一团黑影，换成顺光或侧光',
+    '画面抖 / 糊：找三脚架或让人帮忙扶稳，别边走边拍',
+    '深色衣服贴着深色背景：换浅色衣服或换个背景再拍一条'
+  ] : [
+    'Too far: keep the phone within 3-5 m; the player should fill over half the frame height',
+    'Only upper body / legs blocked: head, shoulders, hips and knees must all be visible',
+    'Backlit: shooting against a window turns her into a silhouette — use front/side light',
+    'Shaky or blurry: use a tripod, or have someone hold the phone still',
+    'Dark clothes on a dark background: switch outfit or background and reshoot'
+  ];
+  const frames = (AI.frames || []).slice(0, 6);
+  return `<div class="step-card">
+    <span class="step-num">${ZH ? '⚠️ 未能识别到人体' : '⚠️ No pose detected'}</span>
+    <div style="background:#7f1d1d;border:1px solid #dc2626;border-radius:10px;padding:12px;margin-top:10px">
+      <div style="color:#fecaca;font-size:13px;font-weight:600;margin-bottom:6px">
+        ${ZH ? '这个视频里没有识别到人体姿态' : 'No human pose was detected in this video'}
+      </div>
+      <div style="color:#fca5a5;font-size:12px;line-height:1.7">
+        ${ZH ? '共抽取' : 'Extracted'} <b>${q.total}</b> ${ZH ? '帧，成功识别' : 'frames, detected'} <b>${q.valid}</b> ${ZH ? '帧。' : 'frames.'}
+        ${ZH ? '所以这次<strong>不会生成分析报告</strong> —— 没有姿态数据时硬写出来的结论一定是废话，这个 App 不会那样骗你。'
+             : 'So <strong>no report is generated</strong> — without pose data any report would be meaningless noise.'}
+      </div>
+      <div style="color:#fca5a5;font-size:11px;margin-top:7px;line-height:1.6">
+        ${ZH ? '识别引擎' : 'Engine'}：<code style="background:#450a0a;padding:1px 5px;border-radius:4px">${AI.delegateUsed || 'CPU'}</code>
+        ${AI.poseErr ? ' · ' + (ZH ? '引擎自愈重试' : 'engine retries') + ' ' + AI.poseErr + (ZH ? ' 次' : '') : ''}
+      </div>
+    </div>
+    <div style="background:#1e293b;border:1px solid #475569;border-radius:10px;padding:12px;margin-top:10px">
+      <div style="color:#e2e8f0;font-size:12px;font-weight:600;margin-bottom:6px">📷 ${ZH ? '这样拍就能识别到了' : 'Shoot like this and it will work'}</div>
+      ${reasons.map((r0, i) => `<div style="display:flex;gap:8px;padding:6px 0;border-bottom:${i < reasons.length-1 ? '1px dashed #334155' : 'none'}">
+        <span style="color:#fbbf24;font-weight:700;font-size:12px;min-width:14px">${i+1}</span>
+        <span style="color:#cbd5e1;font-size:11px;line-height:1.6">${r0}</span>
+      </div>`).join('')}
+    </div>
+    ${frames.length ? `<div style="margin-top:10px;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:10px">
+      <div style="color:#94a3b8;font-size:11px;margin-bottom:6px">${ZH ? '抽到的帧（确认一下是不是压根没拍全人）' : 'Extracted frames — check whether a full body is visible'}</div>
+      <div style="display:flex;gap:5px;height:74px;overflow-x:auto">${frames.map(f => `<img src="${f.dataUrl}" style="height:74px;border-radius:5px;flex:0 0 auto"/>`).join('')}</div>
+    </div>` : ''}
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="opt-btn" style="flex:1;background:#334155" id="aiFailBack">${t('ai_back')}</button>
+      <button class="opt-btn" style="flex:1;background:#fbbf24;color:#1e1b4b;border:none" id="aiFailRetry">🔄 ${ZH ? '换个视频重试' : 'Try another video'}</button>
+    </div>
+  </div>`;
+}
+
+function bindPoseFailed() {
+  const reset = () => {
+    if (AI.videoUrl) { try { URL.revokeObjectURL(AI.videoUrl); } catch (e) {} AI.videoUrl = null; }
+    AI.frames = null; AI.angles = null; AI.feedback = null; AI.fallbackEval = null; AI.metrics = null;
+  };
+  const back = document.getElementById('aiFailBack');
+  if (back) back.onclick = () => { reset(); AI.state = 'choose-action'; renderAIStep(); };
+  const retry = document.getElementById('aiFailRetry');
+  if (retry) retry.onclick = () => { reset(); AI.state = 'choose-source'; renderAIStep(); };
+}
+
 function renderAIStep() {
   const r = document.getElementById('aiRoot');
   r.innerHTML = '';
@@ -2550,6 +2666,7 @@ function renderAIStep() {
       if (rb) rb.onclick = () => { AI.state = 'analyzing'; renderAIStep(); };
     }); break;
     case 'ai-eval': r.innerHTML = aiEvalHTML(); runAIEval(); break;
+    case 'pose-failed': r.innerHTML = poseFailedHTML(); bindPoseFailed(); break;
     case 'result': r.innerHTML = resultHTML(); bindResult(); break;
   }
 }
@@ -2750,12 +2867,16 @@ async function runAnalysis() {
   setProg(15, t('ai_load_model'));
   await ensureLandmarker();
   setProg(35, t('ai_extract'));
-  const N = Math.min(20, Math.max(8, Math.round(dur * 4)));
+  const N = Math.min(24, Math.max(10, Math.round(dur * 4)));
   // 抓帧 + 同步姿态识别（喂 canvas，不再喂 video 元素 —— 避开视频元素时间戳错乱）
   const canvas = document.createElement('canvas');
   canvas.width = v.videoWidth || 720; canvas.height = v.videoHeight || 1280;
   const ctx = canvas.getContext('2d');
+  const tmpCv = document.createElement('canvas');       // v9.7：难帧补抓用的临时画布
+  tmpCv.width = canvas.width; tmpCv.height = canvas.height;
+  const tmpCtx = tmpCv.getContext('2d');
   AI.frames = [];
+  AI.poseOk = 0; AI.poseNull = 0; AI.poseErr = 0;
   const poses = [];
   const landmarksByFrame = [];
   for (let i=0; i<N; i++) {
@@ -2764,7 +2885,18 @@ async function runAnalysis() {
     ctx.drawImage(v, 0, 0);
     const img = canvas.toDataURL('image/jpeg', 0.45);
     AI.frames.push({t:tt, dataUrl:img});
-    const lm = await detectPoseSafe(canvas);   // v9.6：内部用全局单调时间戳 + 出错自动重建
+    let lm = await detectPoseSafe(canvas);
+    if (!lm) {
+      // v9.7：这一帧没识别到人 → 挪一点点时间点补抓一次（快速挥臂时常有糊帧），
+      // 存帧仍然用原时间点的那张图，保证骨架图与帧序列对应
+      const tt2 = Math.min(dur - 0.02, Math.max(0.02, tt + (dur / N) * 0.35));
+      if (Math.abs(tt2 - tt) > 0.03) {
+        await seekVideo(v, tt2);
+        tmpCtx.drawImage(v, 0, 0);
+        lm = await detectPoseSafe(tmpCv);
+        await seekVideo(v, tt);
+      }
+    }
     poses.push(lm);
     landmarksByFrame.push({ t: tt, landmarks: lm, idx: i });
     if (AI.frames[i]) AI.frames[i].landmarks = lm;
@@ -2777,6 +2909,16 @@ async function runAnalysis() {
   }
   setProg(92, t('ai_calc_angle'));
   AI.angles = poseSeriesToAngles(poses);
+  // v9.7：识别质量体检。一帧都没识别到人 → 绝不把 0/-Infinity/NaN 当数据喂给大模型
+  //（这正是「不管放什么视频结论都一样」的直接原因），直接进专门的失败页给出原因
+  AI.poseQuality = poseQuality(AI.angles);
+  AI.metrics = gradeMetrics(AI.angles);
+  AI.delegateUsed = AI.delegate || 'CPU';
+  if (AI.poseQuality.valid === 0) {
+    AI.state = 'pose-failed';
+    renderAIStep();
+    return;
+  }
   AI.fallbackEval = mockCoachEval(AI.angles);
   AI.feedback = AI.fallbackEval;
   AI.feedbackSource = 'mock';
@@ -2818,8 +2960,11 @@ async function detectPoseSafe(frameSource) {
     try {
       if (!AI.landmarker) await ensureLandmarker();
       const res = AI.landmarker.detectForVideo(frameSource, nextMpTs());
-      return (res && res.landmarks && res.landmarks[0]) || null;
+      const lm = (res && res.landmarks && res.landmarks[0]) || null;
+      if (lm) AI.poseOk = (AI.poseOk || 0) + 1; else AI.poseNull = (AI.poseNull || 0) + 1;
+      return lm;
     } catch (e) {
+      AI.poseErr = (AI.poseErr || 0) + 1;
       console.warn('[pose] detect failed, attempt', attempt, (e && e.message) || e);
       try { if (AI.landmarker && AI.landmarker.close) AI.landmarker.close(); } catch (_) {}
       AI.landmarker = null;      // 丢掉坏实例，下一轮重建后重试
@@ -2858,19 +3003,108 @@ function poseSeriesToAngles(poses) {
     return Math.acos(Math.max(-1,Math.min(1, dot/(m1*m2)))) * 180/Math.PI;
   }
   function seg(a,b){return Math.atan2(b.y-a.y, b.x-a.x)*180/Math.PI;}
-  return poses.map(lm => {
+  // v9.7：左右两侧肘角都算（MediaPipe 的 11/13/15 是图像左侧，不一定是惯用手）
+  const out = poses.map(lm => {
     if (!lm || lm.length < 25) return null;
-    const sh = lm[11], el = lm[13], wr = lm[15];
-    const rsh = lm[12], hp = lm[23], rhp = lm[24];
-    const elbowAngle = ang(sh, el, wr);
+    const sh = lm[11], el = lm[13], wr = lm[15];        // 图像左臂
+    const rsh = lm[12], rel = lm[14], rwr = lm[16];     // 图像右臂
+    const hp = lm[23], rhp = lm[24];
+    const elbowL = ang(sh, el, wr);
+    const elbowR = ang(rsh, rel, rwr);
     const shLine = sh && rsh ? seg(sh, rsh) : null;
     const hpLine = hp && rhp ? seg(hp, rhp) : null;
     const hipShoulderSep = (shLine!=null && hpLine!=null) ? Math.abs(shLine - hpLine) : null;
     const sm = (sh && rsh) ? mid(sh, rsh) : null;
     const hm = (hp && rhp) ? mid(hp, rhp) : null;
     const trunkTilt = (sm && hm) ? Math.abs(Math.atan2(sm.x-hm.x, sm.y-hm.y) * 180/Math.PI) : null;
-    return { elbow: elbowAngle, hipShoulder: hipShoulderSep, trunkTilt, stance: 0 };
+    return {
+      elbowL, elbowR, elbow: elbowL,                 // elbow 稍后按惯用手重定向
+      hipShoulder: hipShoulderSep, trunkTilt, stance: 0,
+      _wl: wr ? {x:wr.x, y:wr.y} : null,
+      _wr: rwr ? {x:rwr.x, y:rwr.y} : null
+    };
   });
+  // 手腕速度（归一化坐标 / 帧）—— 用来判断真正的「出手瞬间」，而不是硬编码取 60% 位置
+  out.forEach((a, i) => {
+    if (!a) return;
+    const b = i > 0 ? out[i-1] : null;
+    if (!b || !b._wl || !b._wr) { a.wristSpeed = 0; a._wristSide = 'L'; return; }
+    const dL = (a._wl && b._wl) ? Math.hypot(a._wl.x-b._wl.x, a._wl.y-b._wl.y) : 0;
+    const dR = (a._wr && b._wr) ? Math.hypot(a._wr.x-b._wr.x, a._wr.y-b._wr.y) : 0;
+    a._speedL = dL; a._speedR = dR;
+    a.wristSpeed = Math.max(dL, dR);
+    a._wristSide = dR >= dL ? 'R' : 'L';
+  });
+  // 统计整段哪只手活动更大 → 判定为「投球手/挥棒手」，统一用它那一侧的肘角
+  let sumL = 0, sumR = 0;
+  out.forEach(a => { if (a) { sumL += (a._speedL||0); sumR += (a._speedR||0); } });
+  const mainSide = sumR >= sumL ? 'R' : 'L';
+  out.forEach(a => {
+    if (!a) return;
+    const v = mainSide === 'R' ? a.elbowR : a.elbowL;
+    const alt = mainSide === 'R' ? a.elbowL : a.elbowR;
+    a.elbow = (v != null) ? v : alt;       // 主手那侧没识别到就用另一侧兜底
+    a.mainSide = mainSide;
+    delete a._wl; delete a._wr; delete a._speedL; delete a._speedR;
+  });
+  return out;
+}
+
+// v9.7：姿态识别质量 —— 让「识别失败」和「识别成功但动作差」能区分开
+function poseQuality(angles) {
+  const total = (angles || []).length;
+  const valid = (angles || []).filter(a => a && a.elbow != null).length;
+  const ratio = total ? valid / total : 0;
+  const level = valid === 0 ? 'none' : (ratio < 0.4 ? 'poor' : (ratio < 0.7 ? 'fair' : 'good'));
+  return { total, valid, ratio, level };
+}
+
+// v9.7：真正的出手瞬间 = 手腕速度峰值帧（不同视频会落在不同帧，结论自然不同）
+function pickReleaseIdx(angles) {
+  if (!angles || !angles.length) return 0;
+  let best = -1, bestV = 0;
+  angles.forEach((a, i) => {
+    const v = a && a.wristSpeed;
+    if (typeof v === 'number' && v > bestV) { bestV = v; best = i; }
+  });
+  if (best >= 1 && bestV > 0.004) return best;
+  return Math.max(0, Math.floor(angles.length * 0.6) - 1);   // 兜底：老逻辑
+}
+
+// v9.7：指标达标判定 —— 由代码先算出「哪些已达标、哪些待改进」，
+// 只把「待改进项」交给大模型。这是根治「千篇一律」的关键：
+// 原来把固定理想值(180/55/10)直接摆在数据旁，模型不管实测多好都会照念那三个数字。
+function gradeMetrics(angles) {
+  const q = poseQuality(angles);
+  const el = (angles || []).filter(a => a);
+  const nums = (k) => el.map(a => a[k]).filter(v => typeof v === 'number');
+  const relIdx = pickReleaseIdx(angles);
+  const relFrame = angles && angles[relIdx];
+  const elbowAtRelease = (relFrame && typeof relFrame.elbow === 'number') ? relFrame.elbow : null;
+  const peak = (k) => { const n = nums(k); return n.length ? Math.max(...n) : null; };
+
+  // level: good=优秀 / ok=达标 / weak=不足 / bad=严重不足
+  const spec = [
+    { key:'releaseElbow', label: LANG==='zh'?'出手瞬间肘角':'Elbow at release',
+      value: elbowAtRelease, ideal: LANG==='zh'?'≥170°':'≥170°', unit:'°',
+      grade: v => v>=170?'good':v>=158?'ok':v>=140?'weak':'bad',
+      fix: v => (LANG==='zh'?'出手肘角':'Release elbow') + ' ' + Math.round(v) + '°' },
+    { key:'hipShoulder', label: LANG==='zh'?'髋肩最大分离角':'Peak hip-shoulder sep',
+      value: peak('hipShoulder'), ideal:'≥55°', unit:'°',
+      grade: v => v>=55?'good':v>=40?'ok':v>=25?'weak':'bad',
+      fix: v => (LANG==='zh'?'髋肩分离':'Hip-shoulder') + ' ' + Math.round(v) + '°' },
+    { key:'trunkTilt', label: LANG==='zh'?'躯干最大侧倾':'Peak trunk tilt',
+      value: peak('trunkTilt'), ideal:'≤10°', unit:'°',
+      grade: v => v<=10?'good':v<=16?'ok':v<=24?'weak':'bad',
+      fix: v => (LANG==='zh'?'躯干侧倾':'Trunk tilt') + ' ' + Math.round(v) + '°' }
+  ];
+  const items = spec.map(s => {
+    if (s.value == null) return { ...s, level:'nodata', gap:null };
+    return { ...s, level: s.grade(s.value), gap: null };
+  });
+  const needFix = items.filter(i => i.level==='weak' || i.level==='bad');
+  const passed  = items.filter(i => i.level==='good' || i.level==='ok');
+  return { items, needFix, passed, relIdx, quality: q, hasData: items.some(i=>i.level!=='nodata') };
 }
 
 // ===== v8.4 姿态叠图：在原图上画骨架 + 角度标签，返回新图 dataURL =====
@@ -2952,7 +3186,10 @@ function drawPoseOverlay(frame, idx, angle, isKey) {
 async function buildOverlayFrames() {
   if (!AI.frames || !AI.angles) return { keyDataUrl: null, stripDataUrls: [] };
   const numFrames = AI.frames.length;
-  const releaseIdx = Math.max(0, Math.floor(numFrames * 0.6) - 1);
+  // v9.7：关键帧也按「手腕速度峰值」选，跟分析用的出手帧保持一致
+  const releaseIdx = (AI.metrics && AI.metrics.relIdx != null)
+    ? AI.metrics.relIdx
+    : pickReleaseIdx(AI.angles);
   // 高清关键帧
   const key = await drawPoseOverlay(AI.frames[releaseIdx], releaseIdx+1, AI.angles[releaseIdx], true);
   // 4 帧 strip：按时间均匀
@@ -2979,95 +3216,122 @@ function exportOverlayPNG() {
 }
 
 function mockCoachEval(angles) {
-  const numFrames = angles.length;
-  const releaseIdx = Math.max(0, Math.floor(numFrames * 0.6) - 1);
-  const peakHSSepIdx = angles.reduce((bi, a, i) => (a && (a.hipShoulder||0) > (angles[bi]?.hipShoulder||0) ? i : bi), 0);
-  const elbowAtRelease = angles[releaseIdx]?.elbow ?? 0;
-  const elbowMax = Math.max(...angles.filter(a=>a).map(a=>a.elbow||0));
-  const hipShoulderPeak = Math.max(...angles.filter(a=>a).map(a=>a.hipShoulder||0));
-  const trunkPeak = Math.max(...angles.filter(a=>a).map(a=>a.trunkTilt||0));
+  const ZH = LANG === 'zh';
+  const m = AI.metrics || gradeMetrics(angles);
+  const q = m.quality || poseQuality(angles);
+  const node = m.items;
 
-  let sE=50, sH=50, sT=50;
-  if (elbowAtRelease >= 170) sE=92; else if (elbowAtRelease >= 158) sE=82; else if (elbowAtRelease >= 140) sE=68; else if (elbowAtRelease >= 120) sE=55; else sE=40;
-  if (hipShoulderPeak >= 55) sH=92; else if (hipShoulderPeak >= 40) sH=80; else if (hipShoulderPeak >= 25) sH=65; else if (hipShoulderPeak >= 12) sH=50; else sH=38;
-  if (trunkPeak <= 6) sT=92; else if (trunkPeak <= 12) sT=82; else if (trunkPeak <= 20) sT=68; else if (trunkPeak <= 30) sT=55; else sT=42;
+  // 各级别得分（和 gradeMetrics 的判定一致，不再另立一套阈值）
+  const SC = { good:92, ok:80, weak:58, bad:38, nodata:50 };
+  const sE = SC[node[0].level], sH = SC[node[1].level], sT = SC[node[2].level];
   const overall = Math.round(0.4*sE + 0.4*sH + 0.2*sT);
+  const rd = (v) => Math.round(v);
 
-  const ZH = LANG==='zh';
-  const main = [];
-  if (sE < 70) main.push({
-    label: ZH?'肘关节伸展':'Elbow extension',
-    msg: ZH? `出手瞬间肘角 ${Math.round(elbowAtRelease)}°，离理想的近 180° 还有距离，这意味着你的球速可能还有提升空间。` : `At release your elbow angle was ${Math.round(elbowAtRelease)}°, short of the ~180° ideal — there's likely more velocity to unlock.`,
-    tips: ZH? [
-      '"投手墙"练习：右手扶墙，左手握住，模拟抬腿→出手，感受伸出最后那一刻的"掰开"感',
-      '每天 50 次"L 形慢放"：手肘抬到与肩同高，然后像影片慢动作一样向外展开',
-      '镜面训练：对镜子出手，确保出手瞬间你的肘部像一条直线，而不是弯的'
-    ] : [
-      'Wall drill: simulate the wind-up → release against a wall, feel the "snap" at extension',
-      '50 daily "L-shape slow releases": raise elbow to shoulder, then unfold like slow motion',
-      'Mirror practice: verify your elbow looks like a straight line — not bent — at release'
-    ]
-  });
-  if (sH < 70) main.push({
-    label: ZH?'髋肩分离':'Hip-shoulder separation',
-    msg: ZH? `动作里髋和肩的扭力分离只有 ${Math.round(hipShoulderPeak)}°（优秀投手 ≥55°），这是投球"弹簧"的关键。` : `Your peak hip-shoulder separation is ${Math.round(hipShoulderPeak)}° (elite pitchers hit ≥55°). This is the "spring" of pitching.`,
-    tips: ZH? [
-      '抬腿时多停一拍：让后脚（蹬地脚）用力蹬地，把髋"硬转"向本垒板方向',
-      '做"扭转木板"：站在厚书/平衡板上做投球，强制髋先于肩转动',
-      '录视频看：从侧面看，髋和肩两线最大夹角出现在"出手前"那一刻'
-    ] : [
-      'Pause at leg lift: drive the back hip toward home plate before the upper body rotates',
-      'Rotation board: pitch off a balance board — forces hips to lead the shoulders',
-      'Film side-on: measure the moment of max hip-shoulder angle right before release'
-    ]
-  });
-  if (sT < 70) main.push({
-    label: ZH?'躯干侧倾':'Trunk tilt',
-    msg: ZH? `动作中躯干最大侧倾 ${Math.round(trunkPeak)}°（理想 <10°），过多侧倾会损失能量传递。` : `Peak trunk tilt is ${Math.round(trunkPeak)}° (target <10°). Excess tilt leaks energy down the chain.`,
-    tips: ZH? [
-      '"核心棒"训练：把一根棒贴在背上，从髋到头顶，练习时保证棒不下落',
-      '强化腹斜肌：每周 3 次俄罗斯转体，每次 30 秒',
-      '出手瞬间收紧腹肌，而不是"倒过去"发力'
-    ] : [
-      '"Core stick" drills: a stick along your spine — head, hips should both touch it',
-      'Russian twists 3×/week to strengthen obliques',
-      '"Brace" your core at release — don\'t fall over sideways'
-    ]
-  });
-
-  const primary = main[0] || {
-    label: ZH?'整体动作':'Overall',
-    msg: ZH?'整体动作非常均衡，关节协调性好，继续保持。':'Your mechanics look balanced. Joint coordination is good — keep going.',
-    tips: ZH? [
-      '保持每场比赛 2-3 次录视频，每 2 周对比一次',
-      '赛前 5 分钟动态热身，重点激活髋、肩、核心',
-      '每次训练后花 2 分钟用 App 记一句话反思'
-    ] : [
-      'Record 2-3 videos per game; compare every 2 weeks',
-      '5-min dynamic warmup focusing on hip, shoulder, core',
-      'After every session, log a one-line reflection in the App'
-    ]
+  // 每个指标的「待整改」话术库
+  const LIB = {
+    releaseElbow: {
+      label: ZH?'肘关节伸展':'Elbow extension',
+      msg: (v) => ZH
+        ? `出手瞬间肘角 ${rd(v)}°，离理想的近 180° 还差 ${rd(170 - v)}°，球速还有提升空间。`
+        : `Elbow at release ${rd(v)}°, ${rd(170 - v)}° short of the ~180° ideal — velocity is being left on the table.`,
+      tips: ZH ? [
+        '"投手墙"练习：右手扶墙，模拟抬腿→出手，感受最后一下"掰开"到 170°',
+        '每天 50 次"L 形慢放"：肘抬到与肩同高，再像慢动作一样展开到伸直',
+        '对镜出手，确认出手瞬间肘部接近一条直线'
+      ] : [
+        'Wall drill: simulate wind-up → release, feel the snap out to 170°',
+        '50 daily "L-shape slow releases": elbow to shoulder height, then unfold to straight',
+        'Mirror practice: verify the elbow is nearly a straight line at release'
+      ]
+    },
+    hipShoulder: {
+      label: ZH?'髋肩分离':'Hip-shoulder separation',
+      msg: (v) => ZH
+        ? `髋肩最大分离角只有 ${rd(v)}°（优秀投手 ≥55°），这是投球"弹簧"的关键，当前差 ${rd(55 - v)}°。`
+        : `Peak hip-shoulder separation is only ${rd(v)}° (elite ≥55°) — this is the pitching "spring".`,
+      tips: ZH ? [
+        '抬腿时多停一拍：后脚用力蹬地，把髋"硬转"向本垒板方向',
+        '做"扭转木板"：站在平衡板上投球，强制髋先于肩转动',
+        '侧拍一次慢动作，量出手前那一刻髋线与肩线的夹角'
+      ] : [
+        'Pause at leg lift: drive the back hip toward the plate before the torso opens',
+        'Rotation board: pitch off a balance board — forces hips to lead',
+        'Film side-on, measure the hip-vs-shoulder angle right before release'
+      ]
+    },
+    trunkTilt: {
+      label: ZH?'躯干侧倾':'Trunk tilt',
+      msg: (v) => ZH
+        ? `动作中躯干最大侧倾 ${rd(v)}°（理想 <10°，当前超 ${rd(v - 10)}°），过多侧倾会漏掉能量。`
+        : `Peak trunk tilt is ${rd(v)}° (target <10°, over by ${rd(v - 10)}°) — energy is leaking.`,
+      tips: ZH ? [
+        '"核心棒"训练：一根棒贴背，从髋到头顶保持不落',
+        '强化腹斜肌：每周 3 次俄罗斯转体，每次 30 秒',
+        '出手瞬间收腹"绷住"，而不是整个人倒过去'
+      ] : [
+        '"Core stick" drill: stick along spine from hips to head, keep contact',
+        'Russian twists 3×/week to strengthen obliques',
+        'Brace the core at release — do not fall over sideways'
+      ]
+    }
   };
-  const secondary = main[1] || null;
+
+  // 只针对「待整改项」，最严重的排第一
+  const rank = { bad:0, weak:1, ok:2, good:3, nodata:4 };
+  const fixItems = node.filter(n => n.level === 'weak' || n.level === 'bad')
+                       .sort((a,b) => rank[a.level] - rank[b.level]);
+
+  let primary;
+  if (fixItems.length) {
+    const it = fixItems[0];
+    const lib = LIB[it.key];
+    primary = { label: lib.label, msg: lib.msg(it.value), tips: lib.tips };
+  } else {
+    // 全部达标 —— 不再硬造问题
+    primary = {
+      label: ZH ? '三项指标全部达标' : 'All three metrics passed',
+      msg: ZH
+        ? `出手肘角 ${rd(node[0].value)}°、髋肩分离 ${rd(node[1].value)}°、躯干侧倾 ${rd(node[2].value)}°，三项都达达标线，动作框架已经立住了。`
+        : `Elbow ${rd(node[0].value)}°, hip-shoulder ${rd(node[1].value)}°, trunk tilt ${rd(node[2].value)}° — all three metrics passed.`,
+      tips: ZH ? [
+        '保持：每周录 1 次侧视 + 1 次正视，同角度对比才有意义',
+        '进阶：在保持动作不变的前提下，逐步增加投球强度（每次 +5 球）',
+        '把当前这套动作固化成赛前热身流程，稳定复现'
+      ] : [
+        'Maintain: film 1 side + 1 front view weekly, same angle for real comparison',
+        'Progress: keep the motion identical while adding +5 pitches per session',
+        'Lock this motion in as your pre-game warmup routine'
+      ]
+    };
+  }
+  // 第二问题：只在不达标时给
+  const secondary = fixItems.length > 1
+    ? { label: LIB[fixItems[1].key].label, msg: LIB[fixItems[1].key].msg(fixItems[1].value), tips: LIB[fixItems[1].key].tips }
+    : null;
 
   const encourageList = ZH ? [
-    '科学的训练坚持 21 天就会变成肌肉记忆，你已经在做了！',
-    '每一球都比上一球更接近更好的自己，加油！',
-    '投球是科学，也是艺术 — 你两者都在学。',
-    '记住：未来的棒球名将，都在今天这一步开始。'
+    '动作框架已经成型，剩下的就是把它变成肌肉记忆。',
+    '这一球比上一球更接近你想要的自己。',
+    '投球是科学也是艺术 —— 你在同时练两样。',
+    '把今天改的那一下记住，下次就不用想它了。'
   ] : [
-    '21 days of deliberate practice makes a habit — you\'re already on day 1!',
-    'Each pitch is closer to the best version of you.',
-    'Pitching is science AND art — you\'re learning both.',
-    'Future baseball stars all started exactly here.'
+    'Your mechanics are taking shape — now turn them into muscle memory.',
+    'Each pitch is closer to the version of you that you want.',
+    'Pitching is science AND art — you are learning both.',
+    'Remember today\'s fix, and next time you won\'t have to think about it.'
   ];
+
+  const qualityWarn = (q.level === 'poor' || q.level === 'fair')
+    ? (ZH ? `（识别帧偏少 ${q.valid}/${q.total}，仅供参考）` : ` (only ${q.valid}/${q.total} frames detected — indicative only)`)
+    : '';
 
   return {
     score: overall,
-    problem: primary,
+    problem: { label: primary.label, msg: primary.msg + qualityWarn },
     secondary,
     tips: primary.tips,
-    encourage: encourageList[Math.floor(Math.random() * encourageList.length)]
+    encourage: encourageList[Math.floor(Math.random() * encourageList.length)],
+    metrics: m
   };
 }
 
@@ -3266,108 +3530,162 @@ function buildContextText(action) {
 }
 
 function buildPrompts(action, angles) {
+  const ZH = LANG === 'zh';
   const numFrames = angles.length;
-  const releaseIdx = Math.max(0, Math.floor(numFrames * 0.6) - 1);
-  const elbowAtRelease = +(angles[releaseIdx]?.elbow ?? 0).toFixed(1);
-  const elbowMax = +Math.max(...angles.filter(a=>a).map(a=>a.elbow||0)).toFixed(1);
-  const hipShoulderPeak = +Math.max(...angles.filter(a=>a).map(a=>a.hipShoulder||0)).toFixed(1);
-  const trunkPeak = +Math.max(...angles.filter(a=>a).map(a=>a.trunkTilt||0)).toFixed(1);
-  const stanceMax = +Math.max(...angles.filter(a=>a).map(a=>a.stance||0)).toFixed(1);
-  const ctx = buildContextText(action);
-  const ctxNote = ctx.includes('⚠️ 暂无') ? (LANG==='zh' ? '【重要】本次分析因无近期数据，仅基于视频姿态。请明确在 problem 中说明"暂无可对比的近期数据"。' : '[Note] No recent data — analysis is pose-only. State that in problem.')
-                            : '';
-  const ZH = LANG==='zh';
-  const actionName = action==='swing' ? (ZH?'打击':'batting') : (ZH?'投球':'pitching');
+  const m = AI.metrics || gradeMetrics(angles);
+  const pq = m.quality || poseQuality(angles);
   const isMatch = AI.context === 'match';
-  const sceneName = isMatch ? (ZH?'比赛':'match') : (ZH?'训练':'training');
+  const actionName = action === 'swing' ? (ZH ? '打击' : 'batting') : (ZH ? '投球' : 'pitching');
+  const sceneName = isMatch ? (ZH ? '比赛' : 'match') : (ZH ? '训练' : 'training');
+  const ctx = buildContextText(action);
+  const ctxMissing = ctx.includes('⚠️ 暂无');
 
-  // 关键约束系统 prompt：禁止编造，禁止套话
+  // ===== 系统提示词 =====
   let sysPrompt;
   if (ZH) {
-    sysPrompt = `你是12岁香港女孩莀安的棒球姐姐教练。她正在${isMatch ? '比赛':'训练'}${actionName}（${numFrames}帧姿态已提取）。\n`;
-    sysPrompt += `【场景】${isMatch ? '**比赛**':'**训练**'}`;
+    sysPrompt = `你是12岁香港女孩莀安的棒球姐姐教练。她正在${isMatch ? '比赛' : '训练'}${actionName}（${numFrames}帧姿态已提取）。\n`;
+    sysPrompt += `【场景】${isMatch ? '**比赛**' : '**训练**'}`;
     sysPrompt += isMatch
-      ? `场景。今天要打的是真刀真枪的对抗，你偏严格、教练腔调，重点是让莀安动作稳定、不慌、不作废。\n`
-      : `场景。今天是练功房时间，你偏温柔、姐姐腔调，重点是让她发现自己的动作特点、自己去试不同感觉。\n`;
+      ? `场景。真刀真枪的对抗，你偏严格、教练腔调，重点是让她动作稳定、不慌、不作废。\n`
+      : `场景。练功房时间，你偏温柔、姐姐腔调，重点是让她发现自己的动作特点、自己去试不同感觉。\n`;
     sysPrompt += `输出必须遵守的硬规则：\n`;
-    sysPrompt += `1. 数据精准原则：所有数字必须严格来自下面的"视频姿态数据"和"近期训练与比赛数据"。如果某项数据没给出，写"暂无该指标数据"，**绝不编造**数字、不要使用"大概""差不多""应该""估计""可能"等模糊词。\n`;
-    sysPrompt += `2. 综合原则：从 (a) 视频动作是否一致 (b) 9宫格好球率分布与视频动作的关系 (c) 训练负荷是否合理 (d) 信心与比赛表现变化 四个维度综合。\n`;
-    sysPrompt += `3. 语气原则（按场景切换）：\n`;
+    sysPrompt += `1. 【最重要】用户消息里已经给出「系统核算的指标判定表」，每个指标都标了 ✅达标 / ❌待整改。\n`;
+    sysPrompt += `   - pose_problem 只准讲「必须整改的项」；如果全部达标，就写"三项指标全部达标"。\n`;
+    sysPrompt += `   - ✅ 已达标的项，**绝对禁止**出现在 pose_problem、pose_tips、tips 里（不要建议她去改已经做对的事）。\n`;
+    sysPrompt += `2. 数字原则：pose_problem 必须从判定表里**原文抄一个具体数字**（如"出手肘角132°"）。禁止凭印象写"略低""偏高"。\n`;
+    sysPrompt += `3. 禁止套话——以下词一律不许出现："加油""你真棒""继续努力""保持积极心态""注意休息""避免过度疲劳""加强肩部力量""加强核心""注意姿势""保持良好""坚持就是胜利"。\n`;
+    sysPrompt += `   每条建议必须是**可执行的具体练法**（练什么、做几次、目标数字多少），不是"加强""注意"这种形容词。\n`;
+    sysPrompt += `3.5 tips 的三个槽位固定分工：①战术/9宫格 ②体能/训练负荷 ③心理或习惯。\n`;
+    sysPrompt += `   这三个槽位**不得再写姿态动作练习**（姿态练习已经写在 pose_tips 里了），也不得涉及已达标的项。\n`;
+    sysPrompt += `4. 综合原则：结合 (a) 视频动作 (b) 9宫格好球率分布与动作的关系 (c) 训练负荷 (d) 信心与比赛表现 四个维度。\n`;
+    sysPrompt += `5. 语气（按场景切换）：\n`;
     if (isMatch) {
-      sysPrompt += `   - 比赛腔：短促有力、像赛前最后一遍热身教练；用"稳住""盯紧""推过去""到位"等动词；**严禁**撒娇式结尾（"好不好""敢不敢"等）。\n`;
+      sysPrompt += `   - 比赛腔：短促有力、像赛前最后一遍热身教练；用"稳住""盯紧""推过去""到位"等动词；严禁撒娇式结尾。\n`;
     } else {
-      sysPrompt += `   - 训练腔：陪伴探索式、像姐姐陪练；可以用"试试看""慢慢来""下次我们…"等邀请式结尾；可稍微幽默一点、举生活中的例子。\n`;
+      sysPrompt += `   - 训练腔：陪伴探索式、像姐姐陪练；可用"试试看""慢慢来""下次我们…"等邀请式结尾；可稍幽默。\n`;
     }
-    sysPrompt += `   - **严禁**"加油""你真棒""继续努力""最棒的你""棒棒哒""辛苦了""没问题的"等任何套话。\n`;
-    sysPrompt += `4. 鼓励语原则（重要）：encourage 字段要具备 4 个特征 — ①有具体时间点（比如"上周六"或"上次 vs 北区"），②提一件她刚做对的**具体**事（带数字、带日期、带位置编号皆可），③给一个**面向下次**的小约定或小承诺（不是泛泛"继续"），④10-30字内。\n`;
-    sysPrompt += `   **好例子**：` + (isMatch
-      ? `比赛："9/3 vs 北区你 5 个 K，今天再投中 1 个低位就是 6 个。" / "上次最后被打穿，今天撑过去了，肩部没塌。" / "控球先稳一格，节奏才踩得住。" / "底角那个位置盯好，最后半局给我看着投。" ` +
-        `训练："上周六5个三振你最稳，这次投球稳多了，下次我们练6个敢不敢？" / "姐姐留意到你最近早训多投了 20 球，明天休息日一起去海边？" / "肘部撑住 1 秒再放，慢一拍节奏明天试试看。"`
-      : `训练："上周六5个三振你最稳，这次投球稳多了，下次我们练6个敢不敢？" / "9/3 vs 北区你 5 个 K，这次姿势比当时稳，肩部撑住就对了。" / "姐姐留意到你最近早训多投了 20 球，明天休息日一起去海边？"` +
-        `比赛（参考用，本次偏训练）："9/3 vs 北区你 5 个 K，今天再投中 1 个低位就是 6 个。"`) + `\n`;
-    sysPrompt += `   **反例**："继续加油！""你真棒！""没事的，加油！"。\n`;
-    sysPrompt += `5. 格式原则：严格按JSON输出，不要任何额外文字、Markdown、代码块标记。\n`;
-    sysPrompt += `6. 长度原则：每条文字 ≤30字，每条建议要具体到动作或场景。`;
+    sysPrompt += `6. 鼓励语（encourage）：10-30字，必须含 ①具体时间锚点（日期/某场比赛）②一件她刚做对的**具体**事 ③一个面向下次的小约定。\n`;
+    sysPrompt += `   好例子："9/3 vs 北区你 5 个 K，今天肘角 176° 已经很直，下回把髋转开就是 6 个。"\n`;
+    sysPrompt += `   反例（禁止）："继续加油！""你真棒！"。\n`;
+    sysPrompt += `7. 格式：严格 JSON，不要任何额外文字、不要 markdown 代码块标记。\n`;
+    sysPrompt += `8. 长度：每条文字 ≤30 字。`;
   } else {
-    sysPrompt = `You are a baseball coach for 12-year-old Chan An from Hong Kong, working on ${isMatch?'match':'training'}-${actionName} (${numFrames} pose frames extracted).\n`;
-    sysPrompt += `[Scene] ${isMatch ? '**Match**':'**Training**'} `;
+    sysPrompt = `You are a baseball coach for 12-year-old Chan An from Hong Kong, working on ${isMatch ? 'match' : 'training'}-${actionName} (${numFrames} pose frames).\n`;
+    sysPrompt += `[Scene] ${isMatch ? '**Match**' : '**Training**'} `;
     sysPrompt += isMatch
-      ? `tone: short, firm, pre-game coach voice; imperative verbs "hold"/"lock"/"drive"/"anchor". No baby talk endings.\n`
-      : `tone: gentle, exploratory, big-sister companion; invitations like "let's try".../maybe a small joke. No baby talk endings like "okay?".\n`;
+      ? `tone: short, firm, pre-game coach voice. No baby talk.\n`
+      : `tone: gentle, exploratory, big-sister companion. A small joke is fine.\n`;
     sysPrompt += `HARD RULES:\n`;
-    sysPrompt += `1. Accuracy: All numbers MUST come from provided data. If missing, write "no data" — NEVER fabricate, never use "around"/"roughly"/"maybe"/"probably".\n`;
-    sysPrompt += `2. Synthesis: combine (a) video pose, (b) 9-zone strike-rate vs motion, (c) training-load, (d) confidence trend.\n`;
-    sysPrompt += `3. Tone: switch by scene above. NO cliches ("keep going", "you're amazing", "do your best", "you got this", etc.).\n`;
-    sysPrompt += `4. Encourage principle: encourage MUST contain (i) a specific time anchor (date or match), (ii) one concrete thing she just did right (with a number, position, or date), (iii) a small commitment or invitation for the next session (not generic "continue"). 10-30 chars. Match-scene good: "Last Sat you struck out 5 vs North Zone — today lower-corner 1 more = 6." Training-scene good: "Last Sat your 5 Ks were your steadiest yet. Want to hit 6 next round?" Bad: "Keep going! You got this!".\n`;
-    sysPrompt += `5. Format: STRICT JSON, no extra text, no markdown fences.\n`;
-    sysPrompt += `6. Length: each string ≤30 chars; each tip must be specific to a motion or scene.`;
+    sysPrompt += `1. [MOST IMPORTANT] The user message contains a system-computed metric verdict table (✅ pass / ❌ needs work).\n`;
+    sysPrompt += `   - pose_problem may ONLY discuss "needs work" items; if all pass, say "all three metrics passed".\n`;
+    sysPrompt += `   - ✅ passed items MUST NOT appear in pose_problem, pose_tips or tips. Never suggest improving something she already does well.\n`;
+    sysPrompt += `2. Numbers: pose_problem MUST quote a concrete number from the verdict table (e.g. "elbow 132°"). Never write vague words like "slightly low".\n`;
+    sysPrompt += `3. NO cliches — banned: "keep going", "you're amazing", "do your best", "stay positive", "get some rest", "strengthen your shoulders/core", "mind your posture".\n`;
+    sysPrompt += `   Every tip must be a concrete drill (what to do, how many reps, target number), not an adjective.\n`;
+    sysPrompt += `3.5 The three "tips" slots have fixed roles: (i) tactic/9-zone, (ii) conditioning/load, (iii) mental or habit.\n`;
+    sysPrompt += `   Do NOT put posture drills in these slots (those belong in pose_tips), and never touch a passed metric.\n`;
+    sysPrompt += `4. Synthesis: combine (a) video pose, (b) 9-zone strike-rate vs motion, (c) training load, (d) confidence trend.\n`;
+    sysPrompt += `5. Encourage: 10-30 chars, must include (i) time anchor, (ii) one concrete thing done right, (iii) a small next-session commitment.\n`;
+    sysPrompt += `6. Format: STRICT JSON, no markdown fences, no extra text.\n`;
+    sysPrompt += `7. Length: each string ≤30 chars.`;
   }
 
-  const userPrompt = ZH ?
-    `## 视频姿态数据\n` +
-    `- 帧数：${numFrames}\n` +
-    `- 出手瞬间肘角：${elbowAtRelease}°（理想 ~180°）\n` +
-    `- 全程最大肘角：${elbowMax}°\n` +
-    `- 髋肩最大分离角：${hipShoulderPeak}°（优秀投手 ≥55°）\n` +
-    `- 躯干最大侧倾：${trunkPeak}°（理想 <10°）\n` +
-    (stanceMax > 0 ? `- 两脚最大站距：${stanceMax}px（相对参考）\n` : '') +
-    `\n## 近期训练与比赛数据\n${ctx}\n` +
-    (ctxNote ? `\n${ctxNote}\n` : '') +
-    `\n请输出 STRICT JSON（不要任何其他文字、不要 markdown）：\n` +
-    `{\n` +
-    `  "pose_score": <0-100 整数，仅基于视频姿态>,\n` +
-    `  "pose_problem": "<30字内，指出本次视频最需改的1个动作环节>",\n` +
-    `  "pose_tips": ["<动作相关练1>", "<动作相关练2>", "<动作相关练3>"],\n` +
-    `  "vs_recent": "<40字内，把本次姿态与近期均值对比。如果某指标近期数据中未给肘角，必须写"暂无该指标数据"以坦诚替代，**禁止补全或合理推算**。>",\n` +
-    `  "zone_note": "<35字内，结合近期9宫格统计（如有）说1-2个最稳/最不稳的位置编号+好球率，给出对应投球策略建议。无数据时写"暂无9宫格数据">',\n` +
-    `  "trend_note": "<30字内，对近期训练/比赛趋势的观察（频次/强度/信心变化）>",\n` +
-    `  "load_note": "<30字内，对当前训练负荷的提醒（是否过多/过少，是否需要恢复）>",\n` +
-    `  "tips": ["<综合练1（动作或战术或心理）>", "<综合练2>", "<综合练3>"],\n` +
-    `  "encourage": "<10-30字，具体时间点+一件做对的事+下次的小约定/承诺，禁止套话>"\n` +
-    `}` :
-    `## Video pose data\n` +
-    `- Frames: ${numFrames}\n` +
-    `- Elbow at release: ${elbowAtRelease}° (ideal ~180°)\n` +
-    `- Max elbow: ${elbowMax}°\n` +
-    `- Peak hip-shoulder separation: ${hipShoulderPeak}° (good pitchers ≥55°)\n` +
-    `- Peak trunk tilt: ${trunkPeak}° (ideal <10°)\n` +
-    (stanceMax > 0 ? `- Stance width: ${stanceMax}px\n` : '') +
-    `\n## Recent training/match data\n${ctx}\n` +
-    (ctxNote ? `\n${ctxNote}\n` : '') +
-    `\nOutput STRICT JSON only:\n` +
-    `{\n` +
-    `  "pose_score": <int 0-100, pose only>,\n` +
-    `  "pose_problem": "<≤30 chars, #1 motion issue>",\n` +
-    `  "pose_tips": ["<motion tip1>", "<motion tip2>", "<motion tip3>"],\n` +
-    `  "vs_recent": "<≤40 chars, compare to recent avg. If a metric is not given in the data, write "no data for this metric" — DO NOT estimate or rationalize.>",\n` +
-    `  "zone_note": "<≤35 chars, 1-2 zones (loc id + hit rate) + tactical advice. "no 9-zone data" if absent>",\n` +
-    `  "trend_note": "<≤30 chars, recent trend (freq/intensity/confidence)>",\n` +
-    `  "load_note": "<≤30 chars, load warning>",\n` +
-    `  "tips": ["<synthesis tip1>", "<tip2>", "<tip3>"],\n` +
-    `  "encourage": "<10-30 chars, time anchor + concrete right-doing + next-step invitation, no cliches>"\n` +
-    `}`;
+  // ===== 用户提示词：把「系统核算过的判定表」交给模型 =====
+  const line = (it) => {
+    const v = it.value == null ? null : Math.round(it.value);
+    const mark = it.level === 'good' ? '✅ 达标' : it.level === 'ok' ? '✅ 达标'
+               : it.level === 'weak' ? '❌ 不足' : it.level === 'bad' ? '❌ 严重不足' : '⚠️ 未识别到';
+    let gap = '';
+    if (v != null) {
+      if (it.key === 'releaseElbow') gap = v >= 170 ? `超出 ${Math.round(v - 170)}°` : `差 ${Math.round(170 - v)}°`;
+      else if (it.key === 'hipShoulder') gap = v >= 55 ? `超出 ${Math.round(v - 55)}°` : `差 ${Math.round(55 - v)}°`;
+      else if (it.key === 'trunkTilt') gap = v <= 10 ? `优于上限 ${Math.round(10 - v)}°` : `超 ${Math.round(v - 10)}°`;
+    }
+    return `- ${it.label}：${v == null ? '未识别到' : v + '°'}（理想 ${it.ideal}）→ ${mark}${v != null ? '（' + gap + '）' : ''}`;
+  };
 
-  return { sysPrompt, userPrompt };
+  const zhLines = [];
+  zhLines.push(`## 视频姿态数据（系统已核算，共 ${numFrames} 帧，成功识别 ${pq.valid} 帧）`);
+  zhLines.push(`- 出手帧：第 ${m.relIdx + 1} 帧（按手腕速度峰值自动判定，非固定位置）`);
+  m.items.forEach(it => zhLines.push(line(it)));
+
+  zhLines.push('');
+  if (m.needFix.length) {
+    zhLines.push(`## 本次必须整改的项（只有这 ${m.needFix.length} 项）`);
+    m.needFix.forEach((it, i) => zhLines.push(`${i + 1}. ${it.fix(it.value)}（${it.level === 'bad' ? '严重不足' : '不足'}，理想 ${it.ideal}）`));
+  } else {
+    zhLines.push(`## 本次必须整改的项`);
+    zhLines.push(`（无 —— 所有指标均已达达标线。pose_problem 请写"三项指标全部达标"，pose_tips 给进阶提升方向）`);
+  }
+  zhLines.push('');
+  if (m.passed.length) {
+    zhLines.push(`## 已达标的项（⚠️ 禁止建议改进这些，她已经做对了）`);
+    zhLines.push(`**这些项目已经做得很好。任何一条建议里都不准出现它们，也不准用换句话说的同义建议（比如把"练转髋"包装成"加强髋部发力"）。**`);
+    m.passed.forEach(it => zhLines.push(`- ${it.label} ${Math.round(it.value)}° ✅`));
+    zhLines.push('');
+  }
+  zhLines.push(`## 近期训练与比赛数据`);
+  zhLines.push(ctx);
+  if (ctxMissing) {
+    zhLines.push('');
+    zhLines.push(`【重要】无近期数据可比对，vs_recent / zone_note / trend_note 必须写"暂无该指标数据"，禁止编造。`);
+  }
+  if (pq.level === 'poor' || pq.level === 'fair') {
+    zhLines.push('');
+    zhLines.push(`【识别质量提示】${numFrames} 帧里只有 ${pq.valid} 帧识别到人体（${Math.round(pq.ratio * 100)}%），数据可信度有限，请在 pose_problem 末尾加"（识别帧偏少，仅供参考）"。`);
+  }
+  zhLines.push('');
+  zhLines.push(`请输出 STRICT JSON（不要任何其他文字、不要 markdown）：`);
+  zhLines.push(`{`);
+  zhLines.push(`  "pose_score": <0-100 整数，仅基于视频姿态>,\n`);
+  zhLines.push(`  "pose_problem": "<30字内，必须含判定表里的具体数字，只讲待整改项>",\n`);
+  zhLines.push(`  "pose_tips": ["<针对整改项的具体练法1>", "<练法2>", "<练法3>"],\n`);
+  zhLines.push(`  "vs_recent": "<40字内，与近期均值对比；无数据写"暂无该指标数据">",\n`);
+  zhLines.push(`  "zone_note": "<35字内，9宫格位置编号+好球率+策略；无数据写"暂无9宫格数据">",\n`);
+  zhLines.push(`  "trend_note": "<30字内，近期训练/比赛趋势>",\n`);
+  zhLines.push(`  "load_note": "<30字内，训练负荷提醒>",\n`);
+  zhLines.push(`  "tips": ["<① 战术/9宫格练习，不涉及姿态角度>", "<② 体能/训练负荷安排>", "<③ 心理或习惯，不涉及姿态角度>"],\n`);
+  zhLines.push(`  "encourage": "<10-30字，时间锚点+一件做对的事+下次小约定，禁止套话>"\n`);
+  zhLines.push(`}`);
+  // few-shot：给模型一个「信息密度」的锚
+  zhLines.push('');
+  zhLines.push(`## 正确示例（照这个信息密度写 —— 注意：示例里的项目名只是示范格式，必须换成她本人数据对应的项目）`);
+  zhLines.push(`判定：出手肘角 141°（❌不足） / 髋肩 58°（✅达标） / 躯干侧倾 4°（✅达标）`);
+  zhLines.push(`{"pose_score":62,"pose_problem":"出手肘角141°，差29°未充分伸展","pose_tips":["投手墙练习：出手瞬间把肘掰直到170°","L形慢放50次，感受最后一下伸展","对镜出手，确认前臂与地面垂直"],"tips":["下一场先攻外角低位，每个位置练10球","本周总投球量压在120球内，练2天休1天","投前固定同一套准备动作，深呼吸3次再抬腿"],"encourage":"9/3 vs 北区你5个K，今天肘角141°，下回掰直到160°就是6个。"}`);
+  zhLines.push(`注意：上面示例的三个 tips 分别是「战术 / 负荷 / 心理」，**不要再重复 pose_tips 里已经写过的姿态动作练习**。`);
+  zhLines.push(`## 错误示例（这样写算失败）`);
+  zhLines.push(`{"pose_problem":"出手姿势需要调整","tips":["加强肩部力量训练","注意休息，避免过度疲劳","保持积极心态"]}  ← 无数字、套话、还建议改已达标的项`);
+
+  const userPrompt = zhLines.join('\n');
+
+  // 英文版走同一套结构（保持行为一致）
+  if (ZH) return { sysPrompt, userPrompt };
+
+  const enLines = [];
+  enLines.push(`## Pose data (system-computed; ${numFrames} frames, ${pq.valid} successfully detected)`);
+  enLines.push(`- Release frame: #${m.relIdx + 1} (auto-picked by peak wrist speed, not a fixed position)`);
+  m.items.forEach(it => enLines.push(`- ${it.label}: ${it.value == null ? 'not detected' : Math.round(it.value) + '°'} (ideal ${it.ideal}) → ${it.level === 'weak' ? '❌ WEAK' : it.level === 'bad' ? '❌ SEVERELY WEAK' : '✅ PASS'}`));
+  enLines.push('');
+  enLines.push(`## MUST-FIX items (only these ${m.needFix.length})`);
+  if (m.needFix.length) m.needFix.forEach((it, i) => enLines.push(`${i + 1}. ${it.fix(it.value)}`));
+  else enLines.push(`(none — all metrics passed. Set pose_problem to "all three metrics passed".)`);
+  enLines.push('');
+  if (m.passed.length) {
+    enLines.push(`## PASSED items (⚠️ DO NOT suggest improving these)`);
+    m.passed.forEach(it => enLines.push(`- ${it.label} ${Math.round(it.value)}° ✅`));
+    enLines.push('');
+  }
+  enLines.push(`## Recent training/match data`);
+  enLines.push(ctx);
+  enLines.push('');
+  enLines.push(`Output STRICT JSON only:`);
+  enLines.push(`{"pose_score": <int 0-100>, "pose_problem": "<≤30 chars, quote a number, must-fix only>", "pose_tips": ["<1>","<2>","<3>"], "vs_recent": "<≤40 chars>", "zone_note": "<≤35 chars>", "trend_note": "<≤30 chars>", "load_note": "<≤30 chars>", "tips": ["<1>","<2>","<3>"], "encourage": "<10-30 chars, no cliches>"}`);
+  enLines.push('');
+  enLines.push(`## GOOD example`);
+  enLines.push(`{"pose_score":62,"pose_problem":"Release elbow 141°, 29° short of extension","pose_tips":["Wall drill: snap elbow straight to 170°","50 slow L-shape releases, feel the extension","Mirror release: forearm vertical to ground"],"tips":["20 banded hip turns daily, target 60° sep","Film one side-view slow-mo, check elbow angle","3×12 shoulder-cuff activation before pitching"],"encourage":"You struck out 5 on 9/3 — elbow at 141° today, 160° next gets you 6."}`);
+  enLines.push(`## BAD example (this fails)`);
+  enLines.push(`{"pose_problem":"adjust your release","tips":["strengthen shoulders","get some rest","stay positive"]}`);
+  return { sysPrompt, userPrompt: enLines.join('\n') };
 }
 
 function parseLLMJson(text, fallback) {
@@ -3548,6 +3866,19 @@ function resultHTML() {
        : '');
 
   // ===== 块 1: 视频姿态评分（永远是核心） =====
+  // v9.7：把「识别质量」摆在最显眼处 —— 让「识别失败」和「动作差」一眼可分
+  const pq = AI.poseQuality || poseQuality(AI.angles);
+  const qualityChip = pq.total
+    ? `<div style="margin:8px 0 0;padding:6px 9px;border-radius:7px;font-size:11px;line-height:1.5;${
+        pq.valid === 0 ? 'background:#7f1d1d;color:#fecaca'
+        : pq.level === 'poor' ? 'background:#78350f;color:#fde68a'
+        : pq.level === 'fair' ? 'background:#713f12;color:#fef3c7'
+        : 'background:#14532d;color:#bbf7d0'}">
+        ${pq.valid === 0 ? '❌' : pq.level === 'good' ? '✅' : '⚠️'}
+        ${t('ai_quality_label')} <b>${pq.valid}/${pq.total}</b> ${ZH?'帧识别到人体':'frames detected'}${pq.level === 'poor' || pq.level === 'fair' ? '（' + (ZH?'帧数偏少，结论仅供参考':'low confidence') + '）' : ''}
+        · ${ZH?'出手帧':'release'} #${(AI.metrics ? AI.metrics.relIdx : 0) + 1}
+       </div>`
+    : '';
   const poseBlock = `
     <div style="background:#1e1b4b;border:1px solid #4338ca;border-radius:10px;padding:12px;margin-top:10px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
@@ -3557,7 +3888,8 @@ function resultHTML() {
           <div style="color:#94a3b8;font-size:11px">${isSwing ? (ZH?'打击动作':'Batting') : (ZH?'投球动作':'Pitching')} · ${ZH?'仅基于本次视频':'Pose only'}</div>
         </div>
       </div>
-      <div style="color:#fcd34d;font-size:13px;font-weight:600;margin-bottom:4px">🔍 ${t('ai_problem')}</div>
+      ${qualityChip}
+      <div style="color:#fcd34d;font-size:13px;font-weight:600;margin:10px 0 4px">🔍 ${t('ai_problem')}</div>
       <div style="color:#fde68a;font-size:12px;background:#312e81;border-radius:6px;padding:8px">${ev.problem.msg}</div>
       ${ev.pose_tips && ev.pose_tips.length ? `
         <div style="color:#a5b4fc;font-size:12px;font-weight:600;margin:10px 0 4px">🎯 ${t('ai_pose_tips_title')}</div>
@@ -3583,6 +3915,30 @@ function resultHTML() {
             <div style="color:#e5e7eb;font-size:12px;line-height:1.5">${c.v}</div>
           </div>
         `).join('') : `<div style="color:#94a3b8;font-size:12px">${t('ai_no_recent')}</div>`}
+      </div>
+    `;
+  }
+
+  // ===== 块 1.5: 指标达标判定（v9.7 新增，让「哪些做对了」可见） =====
+  const mtx = AI.metrics;
+  let metricsBlock = '';
+  if (mtx && mtx.hasData) {
+    const row = (it) => {
+      const v = it.value == null ? '—' : Math.round(it.value) + '°';
+      const pass = it.level === 'good' || it.level === 'ok';
+      const col = pass ? '#4ade80' : it.level === 'weak' ? '#fbbf24' : '#f87171';
+      const tag = pass ? (ZH?'✅ 达标':'✅ pass') : it.level === 'weak' ? (ZH?'⚠️ 不足':'⚠️ weak') : (ZH?'❌ 严重不足':'❌ severe');
+      const ideal = `（${ZH?'理想':'ideal'} ${it.ideal}）`;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px dashed #374151">
+        <span style="color:#cbd5e1;font-size:12px">${it.label}<span style="color:#64748b;font-size:10px">${ideal}</span></span>
+        <span style="font-size:12px;color:${col};font-weight:700;white-space:nowrap">${v} · ${tag}</span>
+      </div>`;
+    };
+    metricsBlock = `
+      <div style="background:#111827;border:1px solid #4b5563;border-radius:10px;padding:10px 12px;margin-top:10px">
+        <div style="color:#e5e7eb;font-size:12px;font-weight:600;margin-bottom:6px">📐 ${ZH?'指标达标判定':'Metric verdicts'}</div>
+        ${mtx.items.map(row).join('')}
+        <div style="color:#64748b;font-size:10px;margin-top:7px;line-height:1.6">${ZH?'判定由本机计算；AI 只解释「未达标项」，不会再建议改已经做对的动作。':'Verdicts computed on-device — AI only explains what failed.'}</div>
       </div>
     `;
   }
@@ -3658,6 +4014,7 @@ function resultHTML() {
     <span class="step-num">${t('ai_title_result')}</span>
     ${sourceBanner}
     ${poseBlock}
+    ${metricsBlock}
     ${compareBlock}
     ${tipsBlock}
     ${encourageBlock}
