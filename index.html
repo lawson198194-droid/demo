@@ -422,8 +422,8 @@ const CC_KEYS = ['extRot','pronation','scapula','navelPlate','backFinish'];
 const ccDefault = () => CC_KEYS.reduce((o,k) => { o[k] = 'na'; return o; }, {});
 let LANG = localStorage.getItem('bgc_lang') || 'zh';
 // v9.3：版本标识 —— 用于「你在看的是不是最新版」判断 + 自动更新检测
-const APP_VER = 'v9.9';
-const APP_BUILD = '2026-09-14.1815';
+const APP_VER = 'v9.9.1';
+const APP_BUILD = '2026-09-15.0615';
 let _lastVerCheck = 0;
 
 // 9宫格位置编号（0-24，5x5）
@@ -3350,7 +3350,7 @@ function chainCheck(angles) {
     { no:9, key:'elbowHeight', grp:'injury', stageKey:'S3', stage: ZH?'分離外旋':'Separation',
       label: ZH?'手肘高度 C2（肩外展角）':'Elbow height C2 (abduction)',
       value: armPeak, unit:'°', ideal:'≤90°',
-      level: armPeak==null?'nodata':(armPeak<=90?'good':armPeak<=100?'ok':armPeak<=115?'weak':'bad'),
+      level: armPeak==null?'nodata':(armPeak<=90?'good':armPeak<=100?'ok':armPeak<=110?'weak':'bad'),
       fix: v => (ZH?'手肘高度 ':'Elbow height ') + r1(v) + '°',
       coach: ZH
         ? '教練：「C2 不能高於 90 度，過高很容易造成肩膀的夾擠。」他要求這個年紀必須馬上做到的兩項之一。'
@@ -3373,7 +3373,7 @@ function chainCheck(angles) {
     { no:10, key:'armAngleRelease', grp:'injury', stageKey:'S4', stage: ZH?'出手瞬間':'Release',
       label: ZH?'上臂角度 C1（出手瞬間）':'Upper-arm angle C1 (release)',
       value: armAtRelease, unit:'°', ideal:'≤90°',
-      level: armAtRelease==null?'nodata':(armAtRelease<=90?'good':armAtRelease<=100?'ok':armAtRelease<=115?'weak':'bad'),
+      level: armAtRelease==null?'nodata':(armAtRelease<=90?'good':armAtRelease<=100?'ok':armAtRelease<=110?'weak':'bad'),
       fix: v => (ZH?'上臂角度 ':'Upper-arm ') + r1(v) + '°',
       coach: ZH
         ? '教練：「只要 C1 過大，轉出去的時候，手肘的負擔就會太大。」'
