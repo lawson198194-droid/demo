@@ -419,8 +419,8 @@
 const KEY = 'baseball_growth_coach_v6';
 let LANG = localStorage.getItem('bgc_lang') || 'zh';
 // v9.3：版本标识 —— 用于「你在看的是不是最新版」判断 + 自动更新检测
-const APP_VER = 'v9.5';
-const APP_BUILD = '2026-09-13.0820';
+const APP_VER = 'v9.6';
+const APP_BUILD = '2026-09-14.1135';
 let _lastVerCheck = 0;
 
 // 9宫格位置编号（0-24，5x5）
@@ -617,6 +617,8 @@ const I18N = {
   ai_err_no_pose: { zh:'未检测到人体，请让镜头拍到完整上半身', en:'No body detected. Show full upper body to the camera.' },
   ai_err_too_short: { zh:'视频太短（<0.5 秒）', en:'Video too short (<0.5s)' },
   ai_err_camera: { zh:'无法访问摄像头：', en:'Cannot access camera: ' },
+  ai_err_generic: { zh:'分析中断了，可以重试一次', en:'Analysis stopped — you can retry' },
+  ai_retry: { zh:'重新分析', en:'Retry analysis' },
   export_section: { zh:'📤 数据导出（发明展准备）', en:'📤 Export (for Geneva)' },
   export_sub: { zh:'导出 CSV / JSON，可直接展示或分析', en:'Export CSV / JSON for the Geneva booth' },
   exp_csv: { zh:'📥 下载 CSV 数据', en:'📥 Download CSV' }, exp_pdf: { zh:'📄 导出成长报告 PDF', en:'📄 Export Growth Report PDF' },
@@ -2448,6 +2450,10 @@ function showUpdateBanner(remoteVer) {
   el.classList.add('show');
 }
 function checkForUpdate(manual) {
+  if (typeof fetch !== 'function') {   // v9.6：老 WebView/测试环境没有 fetch 时安全退出
+    if (manual) setVerStatus(t('ver_fail'), '#dc2626');
+    return Promise.resolve();
+  }
   return fetch('./version.txt?t=' + Date.now(), { cache:'no-store' })
     .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(txt => {
@@ -2465,13 +2471,19 @@ function checkForUpdate(manual) {
     .catch(() => { if (manual) setVerStatus(t('ver_fail'), '#dc2626'); });
 }
 
-setInterval(()=>{ document.getElementById('clk').textContent = new Date().toTimeString().slice(0,5); }, 1000);
+setInterval(()=>{ const c = document.getElementById('clk'); if (c) c.textContent = new Date().toTimeString().slice(0,5); }, 1000);
 if (LANG === 'en') { document.getElementById('langZh').classList.remove('on'); document.getElementById('langEn').classList.add('on'); document.documentElement.lang = 'en'; }
-render();
-bindCsvModal();   // v9.3：CSV 弹层全局绑定（入口在「AI教练」页）
-bindGcModal();    // v9.3：GC PDF 弹层全局绑定（入口在日志页·比赛类型）
-checkForUpdate();   // v9.2：后台静默比对 version.txt，有新版顶部弹条
-(function(){ const dv = document.getElementById('deskVer'); if (dv) dv.textContent = APP_VER + ' · ' + APP_BUILD; })();
+// v9.6：启动步骤逐个隔离 —— 任何一步抛错都不能中断脚本（否则后面 const 初始化失败会连锁报错）
+[['render', () => render()],
+ ['bindCsvModal', () => bindCsvModal()],
+ ['bindGcModal', () => bindGcModal()],
+ ['checkForUpdate', () => checkForUpdate()]].forEach(([name, fn]) => {
+  try { fn(); } catch (e) { console.error('[boot] ' + name + ' failed', e); }
+});
+try {
+  const dv = document.getElementById('deskVer'); if (dv) dv.textContent = APP_VER + ' · ' + APP_BUILD;
+  const pv = document.getElementById('aiVerPill'); if (pv) pv.textContent = APP_VER + ' 双语';
+} catch (e) { console.error('[boot] version labels failed', e); }
 // ===== v7 AI Coach 视频分析模块 =====
 const MP_LIB = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
 const MP_WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
@@ -2528,7 +2540,15 @@ function renderAIStep() {
     case 'choose-source': r.innerHTML = step2HTML(); bindStep2(); break;
     case 'recording': r.innerHTML = recordingHTML(); startRecording(); break;
     case 'loading-video': r.innerHTML = loadingHTML(); bindLoading(); break;
-    case 'analyzing': r.innerHTML = analyzingHTML(); runAnalysis().catch(e=>{document.getElementById('aiLoadText').textContent='❌ '+e.message;}); break;
+    case 'analyzing': r.innerHTML = analyzingHTML(); runAnalysis().catch(e => {
+      console.error('[AI] analysis failed', e);
+      const txt = document.getElementById('aiLoadText');
+      if (txt) txt.innerHTML = `❌ ${t('ai_err_generic')}<br><span style="font-size:10px;color:#94a3b8;line-height:1.5">${esc(String((e && e.message) || e).slice(0,160))}</span>`;
+      const box = document.getElementById('aiLoadBox');
+      if (box) box.innerHTML = `<button class="opt-btn" id="aiRetryBtn" style="margin-top:10px">🔄 ${t('ai_retry')}</button>`;
+      const rb = document.getElementById('aiRetryBtn');
+      if (rb) rb.onclick = () => { AI.state = 'analyzing'; renderAIStep(); };
+    }); break;
     case 'ai-eval': r.innerHTML = aiEvalHTML(); runAIEval(); break;
     case 'result': r.innerHTML = resultHTML(); bindResult(); break;
   }
@@ -2704,6 +2724,7 @@ function analyzingHTML() {
     <div class="vid-wrap"><video id="aiQuietVid" playsinline muted></video></div>
     <div class="progress"><div class="progress-bar" id="aiProgBar"></div></div>
     <p id="aiLoadText" style="color:#fbbf24;font-size:13px;text-align:center;min-height:18px"></p>
+    <div id="aiLoadBox"></div>
     <div class="frame-strip" id="aiStrip"></div>
   </div>`;
 }
@@ -2722,42 +2743,37 @@ async function runAnalysis() {
   v.src = AI.videoUrl;
   await new Promise(r => v.addEventListener('loadedmetadata', r, {once:true}));
   await new Promise(r => v.addEventListener('canplay', r, {once:true}));
-  if (v.duration < 0.4) throw new Error(t('ai_err_too_short'));
+  // v9.6：MediaRecorder 录的 WebM 时长常是 Infinity/NaN → 先逼浏览器算出真实时长
+  let dur = (isFinite(v.duration) && v.duration > 0.2) ? v.duration : await probeDuration(v);
+  if (!dur) dur = 8;                                     // 实在测不出，按 8 秒兜底
+  if (dur < 0.4) throw new Error(t('ai_err_too_short'));
   setProg(15, t('ai_load_model'));
   await ensureLandmarker();
   setProg(35, t('ai_extract'));
-  const N = Math.min(20, Math.max(8, Math.floor(v.duration*8)));
-  // 在静音视频上抓帧
+  const N = Math.min(20, Math.max(8, Math.round(dur * 4)));
+  // 抓帧 + 同步姿态识别（喂 canvas，不再喂 video 元素 —— 避开视频元素时间戳错乱）
   const canvas = document.createElement('canvas');
-  canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+  canvas.width = v.videoWidth || 720; canvas.height = v.videoHeight || 1280;
   const ctx = canvas.getContext('2d');
   AI.frames = [];
+  const poses = [];
+  const landmarksByFrame = [];
   for (let i=0; i<N; i++) {
-    const tt = (i+0.5)/N * v.duration;
+    const tt = (i+0.5)/N * dur;
     await seekVideo(v, tt);
     ctx.drawImage(v, 0, 0);
     const img = canvas.toDataURL('image/jpeg', 0.45);
     AI.frames.push({t:tt, dataUrl:img});
-    setProg(35 + 25*i/N, `${t('ai_extract')} ${i+1}/${N}`);
+    const lm = await detectPoseSafe(canvas);   // v9.6：内部用全局单调时间戳 + 出错自动重建
+    poses.push(lm);
+    landmarksByFrame.push({ t: tt, landmarks: lm, idx: i });
+    if (AI.frames[i]) AI.frames[i].landmarks = lm;
+    setProg(35 + 55*(i+1)/N, `${t('ai_pose_detect')} ${i+1}/${N}`);
   }
   // 抽帧渲染到 strip
   const strip = document.getElementById('aiStrip');
   if (strip) {
     strip.innerHTML = AI.frames.map(f => `<img src="${f.dataUrl}"/>`).join('');
-  }
-  setProg(65, t('ai_pose_detect'));
-  // MediaPipe 跑每帧（在原始 video 元素上）
-  const poses = [];
-  const landmarksByFrame = [];
-  for (let i=0; i<N; i++) {
-    const tt = (i+0.5)/N * v.duration;
-    await seekVideo(v, tt);
-    const result = AI.landmarker.detectForVideo(v, tt*1000);
-    const lm = result.landmarks[0] || null;
-    poses.push(lm);
-    landmarksByFrame.push({ t: tt, landmarks: lm, idx: i });
-    if (AI.frames[i]) AI.frames[i].landmarks = lm;
-    setProg(65 + 25*i/N, `${t('ai_pose_detect')} ${i+1}/${N}`);
   }
   setProg(92, t('ai_calc_angle'));
   AI.angles = poseSeriesToAngles(poses);
@@ -2782,10 +2798,51 @@ async function runAnalysis() {
 
 function seekVideo(v, t) {
   return new Promise(resolve => {
-    const onSeek = () => { v.removeEventListener('seeked', onSeek); resolve(); };
-    v.addEventListener('seeked', onSeek);
-    v.currentTime = t;
-    setTimeout(resolve, 1500);
+    let done = false;
+    const fin = () => { if (done) return; done = true; v.removeEventListener('seeked', fin); resolve(); };
+    v.addEventListener('seeked', fin);
+    try { v.currentTime = t; } catch (e) { fin(); }
+    setTimeout(fin, 1500);
+  });
+}
+
+// ===== v9.6 修复「Packet timestamp mismatch / norm_rect」=====
+// MediaPipe 要求喂进去的时间戳严格单调递增；同一个 landmarker 实例跨多次分析、
+// 或视频时长识别错（MediaRecorder 的 WebM duration=Infinity）时，时间戳会回退 → 直接报错。
+// 对策：① 全局自增计数器，绝不回退 ② 喂 canvas 不喂 video 元素 ③ 出错就重建 landmarker 重试
+let MP_TS = 0;
+function nextMpTs() { MP_TS += 33; return MP_TS; }   // ~30fps 的假时间轴，只要求递增
+
+async function detectPoseSafe(frameSource) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      if (!AI.landmarker) await ensureLandmarker();
+      const res = AI.landmarker.detectForVideo(frameSource, nextMpTs());
+      return (res && res.landmarks && res.landmarks[0]) || null;
+    } catch (e) {
+      console.warn('[pose] detect failed, attempt', attempt, (e && e.message) || e);
+      try { if (AI.landmarker && AI.landmarker.close) AI.landmarker.close(); } catch (_) {}
+      AI.landmarker = null;      // 丢掉坏实例，下一轮重建后重试
+    }
+  }
+  return null;                   // 这一帧没姿态数据，继续跑后面的帧，不整体失败
+}
+
+// MediaRecorder 产出的 WebM：duration 常为 Infinity / NaN。
+// 用「跳到一个超大时间点」逼浏览器解析出真实时长（业界通用 hack）。
+function probeDuration(v) {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return; settled = true;
+      v.removeEventListener('durationchange', finish);
+      v.removeEventListener('seeked', finish);
+      resolve((isFinite(v.duration) && v.duration > 0) ? v.duration : 0);
+    };
+    v.addEventListener('durationchange', finish);
+    v.addEventListener('seeked', finish);
+    try { v.currentTime = 1e101; } catch (e) { finish(); }
+    setTimeout(finish, 2500);
   });
 }
 
@@ -3692,7 +3749,7 @@ window.bindAIStartBtn = function() {
 <div id="aiModal">
   <div class="top-bar">
     <button class="x-btn" onclick="closeAICoach()">✕</button>
-    <h3>🤖 AI Video Coach <span class="pill" style="margin-left:8px;background:#7c3aed;color:#f5f3ff">v8.4 双语气</span></h3>
+    <h3>🤖 AI Video Coach <span class="pill" id="aiVerPill" style="margin-left:8px;background:#7c3aed;color:#f5f3ff">v9.6</span></h3>
   </div>
   <div class="step-area" id="aiRoot"></div>
   <input type="file" id="aiPicker" accept="video/*" style="display:none" onchange="pickFromAlbum(this.files[0])">
